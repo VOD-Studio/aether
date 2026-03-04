@@ -33,14 +33,25 @@ async fn main() -> Result<()> {
         .build()
         .await?;
 
-    info!("正在登录 Matrix...");
+    // 检查是否已有有效会话
+    if client.session_meta().is_some() {
+        info!("检测到已存在的会话，跳过登录");
+    } else {
+        info!("正在登录 Matrix...");
 
-    // 登录
-    client
-        .matrix_auth()
-        .login_username(&config.matrix_username, &config.matrix_password)
-        .initial_device_display_name(&config.device_display_name)
-        .await?;
+        let mut login_builder = client
+            .matrix_auth()
+            .login_username(&config.matrix_username, &config.matrix_password)
+            .initial_device_display_name(&config.device_display_name);
+
+        // 如果配置了设备ID，使用它
+        if let Some(device_id) = &config.matrix_device_id {
+            login_builder = login_builder.device_id(device_id.as_str());
+            info!("使用配置的设备ID: {}", device_id);
+        }
+
+        login_builder.await?;
+    }
 
     let user_id = client.user_id().unwrap();
     info!("登录成功: {}", user_id);

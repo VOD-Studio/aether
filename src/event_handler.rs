@@ -8,7 +8,7 @@ use matrix_sdk::{
         OwnedEventId, OwnedUserId,
         events::room::{
             member::{MembershipState, StrippedRoomMemberEvent},
-            message::{RoomMessageEventContent, ReplacementMetadata},
+            message::{ReplacementMetadata, RoomMessageEventContent},
         },
     },
 };
@@ -215,7 +215,8 @@ impl EventHandler {
                         // 发送或编辑消息
                         if let Some(ref original_event_id) = event_id {
                             // 编辑已有消息
-                            let metadata = ReplacementMetadata::new(original_event_id.clone(), None);
+                            let metadata =
+                                ReplacementMetadata::new(original_event_id.clone(), None);
                             let msg_content = RoomMessageEventContent::text_plain(&content)
                                 .make_replacement(metadata);
                             room.send(msg_content).await?;
@@ -243,7 +244,8 @@ impl EventHandler {
                     if !content.is_empty() {
                         let error_msg = format!("{}\n\n[错误: {}]", content, e);
                         if let Some(ref original_event_id) = event_id {
-                            let metadata = ReplacementMetadata::new(original_event_id.clone(), None);
+                            let metadata =
+                                ReplacementMetadata::new(original_event_id.clone(), None);
                             let msg_content = RoomMessageEventContent::text_plain(&error_msg)
                                 .make_replacement(metadata);
                             room.send(msg_content).await?;
@@ -269,16 +271,14 @@ impl EventHandler {
             s.content().to_string()
         };
 
-        if !final_content.is_empty() {
-            if let Some(ref original_event_id) = event_id {
-                // 编辑为最终内容
-                let metadata = ReplacementMetadata::new(original_event_id.clone(), None);
-                let msg_content = RoomMessageEventContent::text_plain(&final_content)
-                    .make_replacement(metadata);
-                room.send(msg_content).await?;
-            }
-            // 如果 event_id 为 None，说明从未发送过消息（流立即结束且内容为空或被过滤）
-            // 这种情况理论上不应该发生，因为上面已经在消费流时处理了
+        if !final_content.is_empty()
+            && let Some(ref original_event_id) = event_id
+        {
+            // 编辑为最终内容
+            let metadata = ReplacementMetadata::new(original_event_id.clone(), None);
+            let msg_content =
+                RoomMessageEventContent::text_plain(&final_content).make_replacement(metadata);
+            room.send(msg_content).await?;
         }
 
         Ok(())

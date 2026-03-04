@@ -6,6 +6,7 @@ pub struct Config {
     pub matrix_homeserver: String,
     pub matrix_username: String,
     pub matrix_password: String,
+    pub matrix_device_id: Option<String>,
     pub device_display_name: String,
 
     // AI API 配置
@@ -64,6 +65,7 @@ impl Config {
                          请在 .env 文件或环境变量中配置 Matrix 密码。"
                 )
             })?,
+            matrix_device_id: std::env::var("MATRIX_DEVICE_ID").ok(),
             device_display_name: std::env::var("DEVICE_DISPLAY_NAME")
                 .unwrap_or_else(|_| "AI Bot".to_string()),
             openai_api_key: std::env::var("OPENAI_API_KEY").map_err(|_| {

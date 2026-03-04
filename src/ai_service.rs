@@ -109,7 +109,10 @@ impl AiService {
         &self,
         session_id: &str,
         prompt: &str,
-    ) -> Result<(Arc<Mutex<StreamingState>>, Pin<Box<dyn Stream<Item = Result<String>> + Send>>)> {
+    ) -> Result<(
+        Arc<Mutex<StreamingState>>,
+        Pin<Box<dyn Stream<Item = Result<String>> + Send>>,
+    )> {
         // 添加用户消息到历史
         {
             let mut conv = self.inner.conversation.write().await;
@@ -138,39 +141,44 @@ impl AiService {
         let session_id_owned = session_id.to_string();
 
         // 包装 stream，在消费时更新状态
-        let wrapped_stream = stream
-            .filter_map(move |chunk_result| {
-                let state = state_clone.clone();
-                let conversation = conversation.clone();
-                let session_id_owned = session_id_owned.clone();
-                async move {
-                    match chunk_result {
-                        Ok(chunk) => {
-                            // 提取 delta 内容
-                            if let Some(delta) = chunk.choices.first().and_then(|c| c.delta.content.clone()) {
-                                // 更新共享状态
-                                {
-                                    let mut s = state.lock().await;
-                                    s.append(&delta);
-                                }
-                                Some(Ok(delta))
-                            } else {
-                                // 检查是否是结束标记
-                                if chunk.choices.first().map_or(false, |c| c.finish_reason.is_some()) {
-                                    // 保存完整回复到会话历史
-                                    let s = state.lock().await;
-                                    let content = s.content().to_string();
-                                    drop(s); // 释放锁
-                                    let mut conv = conversation.write().await;
-                                    conv.add_assistant_message(&session_id_owned, &content);
-                                }
-                                None
+        let wrapped_stream = stream.filter_map(move |chunk_result| {
+            let state = state_clone.clone();
+            let conversation = conversation.clone();
+            let session_id_owned = session_id_owned.clone();
+            async move {
+                match chunk_result {
+                    Ok(chunk) => {
+                        // 提取 delta 内容
+                        if let Some(delta) =
+                            chunk.choices.first().and_then(|c| c.delta.content.clone())
+                        {
+                            // 更新共享状态
+                            {
+                                let mut s = state.lock().await;
+                                s.append(&delta);
                             }
+                            Some(Ok(delta))
+                        } else {
+                            // 检查是否是结束标记
+                            if chunk
+                                .choices
+                                .first()
+                                .is_some_and(|c| c.finish_reason.is_some())
+                            {
+                                // 保存完整回复到会话历史
+                                let s = state.lock().await;
+                                let content = s.content().to_string();
+                                drop(s); // 释放锁
+                                let mut conv = conversation.write().await;
+                                conv.add_assistant_message(&session_id_owned, &content);
+                            }
+                            None
                         }
-                        Err(e) => Some(Err(anyhow::anyhow!("流式响应错误: {}", e))),
                     }
+                    Err(e) => Some(Err(anyhow::anyhow!("流式响应错误: {}", e))),
                 }
-            });
+            }
+        });
 
         Ok((state, Box::pin(wrapped_stream)))
     }
