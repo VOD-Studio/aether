@@ -1,6 +1,9 @@
 .PHONY: build run test check fmt clippy clean help
 
 # 默认目标
+build:
+	cargo build --release
+
 help:
 	@echo "可用命令:"
 	@echo "  make build    - 编译项目"
