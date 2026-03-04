@@ -1,4 +1,4 @@
-.PHONY: build run test check fmt clippy clean help
+.PHONY: build run test check fmt clippy lint clean fix help
 
 # 默认目标
 build:
@@ -11,11 +11,9 @@ help:
 	@echo "  make test     - 运行测试"
 	@echo "  make check    - 快速检查（不生成二进制文件）"
 	@echo "  make fmt      - 格式化代码"
-	@echo "  make clippy   - 运行 clippy lint"
+	@echo "  make lint     - 运行 clippy lint"
+	@echo "  make fix      - 自动修复代码问题并格式化"
 	@echo "  make clean    - 清理构建产物"
-
-build:
-	cargo build --release
 
 run:
 	cargo run
@@ -32,5 +30,10 @@ fmt:
 clippy:
 	cargo clippy -- -D warnings
 
+lint: clippy
+
 clean:
 	cargo clean
+
+fix:
+	cargo fix --allow-dirty --all-features && cargo fmt

@@ -5,9 +5,7 @@ mod event_handler;
 
 use anyhow::Result;
 use matrix_sdk::{
-    Client,
-    config::SyncSettings,
-    ruma::events::room::member::StrippedRoomMemberEvent,
+    Client, config::SyncSettings, ruma::events::room::member::StrippedRoomMemberEvent,
 };
 use tracing::info;
 
@@ -20,7 +18,7 @@ async fn main() -> Result<()> {
     // 初始化日志
     tracing_subscriber::fmt()
         .with_env_filter(
-            tracing_subscriber::EnvFilter::try_new("info").expect("Invalid env filter")
+            tracing_subscriber::EnvFilter::try_new("info").expect("Invalid env filter"),
         )
         .init();
 
@@ -51,11 +49,7 @@ async fn main() -> Result<()> {
     let ai_service = AiService::new(&config);
 
     // 创建事件处理器
-    let handler = EventHandler::new(
-        ai_service,
-        user_id.to_owned(),
-        &config,
-    );
+    let handler = EventHandler::new(ai_service, user_id.to_owned(), &config);
 
     // 注册邀请事件处理器 - StrippedState 事件会自动提供 Room
     client.add_event_handler(

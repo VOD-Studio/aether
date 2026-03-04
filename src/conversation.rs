@@ -1,10 +1,8 @@
 use std::collections::HashMap;
 
 use async_openai::types::{
-    ChatCompletionRequestAssistantMessage,
-    ChatCompletionRequestMessage,
-    ChatCompletionRequestSystemMessage,
-    ChatCompletionRequestUserMessage,
+    ChatCompletionRequestAssistantMessage, ChatCompletionRequestMessage,
+    ChatCompletionRequestSystemMessage, ChatCompletionRequestUserMessage,
 };
 
 pub struct ConversationManager {
@@ -23,7 +21,10 @@ impl ConversationManager {
     }
 
     pub fn add_user_message(&mut self, session_id: &str, content: &str) {
-        let history = self.conversations.entry(session_id.to_string()).or_default();
+        let history = self
+            .conversations
+            .entry(session_id.to_string())
+            .or_default();
 
         history.push(ChatCompletionRequestMessage::User(
             ChatCompletionRequestUserMessage {
@@ -40,10 +41,14 @@ impl ConversationManager {
 
     pub fn add_assistant_message(&mut self, session_id: &str, content: &str) {
         if let Some(history) = self.conversations.get_mut(session_id) {
-            let mut msg = ChatCompletionRequestAssistantMessage::default();
-            msg.content = Some(async_openai::types::ChatCompletionRequestAssistantMessageContent::Text(
-                content.to_string(),
-            ));
+            let msg = ChatCompletionRequestAssistantMessage {
+                content: Some(
+                    async_openai::types::ChatCompletionRequestAssistantMessageContent::Text(
+                        content.to_string(),
+                    ),
+                ),
+                ..Default::default()
+            };
             history.push(ChatCompletionRequestMessage::Assistant(msg));
         }
     }

@@ -1,10 +1,9 @@
 use anyhow::Result;
 use matrix_sdk::{
-    Client,
-    Room,
+    Client, Room,
     ruma::{
-        events::room::member::{MembershipState, StrippedRoomMemberEvent},
         OwnedUserId,
+        events::room::member::{MembershipState, StrippedRoomMemberEvent},
     },
 };
 use tracing::{debug, info, warn};
@@ -86,8 +85,7 @@ impl EventHandler {
             true
         } else {
             // 房间：检查命令前缀或 @提及
-            text.starts_with(&self.command_prefix)
-                || text.contains(&self.bot_user_id.to_string())
+            text.starts_with(&self.command_prefix) || text.contains(&self.bot_user_id.to_string())
         };
 
         if !should_respond {
@@ -100,7 +98,8 @@ impl EventHandler {
         if clean_text == "!reset" {
             let session_id = room_id.to_string();
             self.ai_service.reset_conversation(&session_id).await;
-            room.send(RoomMessageEventContent::text_plain("会话历史已清除")).await?;
+            room.send(RoomMessageEventContent::text_plain("会话历史已清除"))
+                .await?;
             return Ok(());
         }
 
@@ -109,7 +108,8 @@ impl EventHandler {
                 "可用命令:\n{} <消息> - 与 AI 对话\n!reset - 清除会话历史\n!help - 显示帮助",
                 self.command_prefix
             );
-            room.send(RoomMessageEventContent::text_plain(help_text)).await?;
+            room.send(RoomMessageEventContent::text_plain(help_text))
+                .await?;
             return Ok(());
         }
 
@@ -125,13 +125,16 @@ impl EventHandler {
         // 调用 AI
         match self.ai_service.chat(&session_id, &clean_text).await {
             Ok(reply) => {
-                room.send(RoomMessageEventContent::text_plain(reply)).await?;
+                room.send(RoomMessageEventContent::text_plain(reply))
+                    .await?;
             }
             Err(e) => {
                 warn!("AI 调用失败: {}", e);
-                room.send(RoomMessageEventContent::text_plain(
-                    format!("AI 服务暂时不可用: {}", e)
-                )).await?;
+                room.send(RoomMessageEventContent::text_plain(format!(
+                    "AI 服务暂时不可用: {}",
+                    e
+                )))
+                .await?;
             }
         }
 

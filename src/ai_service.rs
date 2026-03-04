@@ -2,11 +2,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 
 use anyhow::Result;
-use async_openai::{
-    Client,
-    config::OpenAIConfig,
-    types::CreateChatCompletionRequestArgs,
-};
+use async_openai::{Client, config::OpenAIConfig, types::CreateChatCompletionRequestArgs};
 
 use crate::config::Config;
 use crate::conversation::ConversationManager;
