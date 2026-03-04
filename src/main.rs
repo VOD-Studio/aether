@@ -5,7 +5,7 @@ mod event_handler;
 
 use anyhow::Result;
 use matrix_sdk::{
-    Client, config::SyncSettings, ruma::events::room::member::StrippedRoomMemberEvent,
+    Client, LoopCtrl, config::SyncSettings, ruma::events::room::member::StrippedRoomMemberEvent,
 };
 use tracing::info;
 
@@ -76,8 +76,20 @@ async fn main() -> Result<()> {
 
     info!("开始同步...");
 
-    // 开始同步
-    client.sync(SyncSettings::new()).await?;
+    // 开始同步（使用回调处理错误，实现自动重连）
+    client
+        .sync_with_result_callback(SyncSettings::new(), |result| async move {
+            match result {
+                Ok(_) => {
+                    tracing::trace!("同步成功");
+                }
+                Err(e) => {
+                    tracing::warn!("同步失败，将自动重试: {}", e);
+                }
+            }
+            Ok(LoopCtrl::Continue)
+        })
+        .await?;
 
     Ok(())
 }
