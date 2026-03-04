@@ -42,6 +42,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "aether-matrix"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-openai",
+ "dotenvy",
+ "futures-util",
+ "matrix-sdk",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "aho-corasick"
 version = "1.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2127,22 +2144,6 @@ dependencies = [
  "sha2",
  "thiserror 2.0.18",
  "zeroize",
-]
-
-[[package]]
-name = "matrix-xfy"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "async-openai",
- "dotenvy",
- "matrix-sdk",
- "serde",
- "serde_json",
- "thiserror 2.0.18",
- "tokio",
- "tracing",
- "tracing-subscriber",
 ]
 
 [[package]]

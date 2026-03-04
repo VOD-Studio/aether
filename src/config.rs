@@ -17,6 +17,11 @@ pub struct Config {
     // 机器人配置
     pub command_prefix: String,
     pub max_history: usize,
+
+    // 流式输出配置
+    pub streaming_enabled: bool,
+    pub streaming_min_interval_ms: u64,
+    pub streaming_min_chars: usize,
 }
 
 impl Config {
@@ -76,6 +81,19 @@ impl Config {
             command_prefix: std::env::var("BOT_COMMAND_PREFIX")
                 .unwrap_or_else(|_| "!ai".to_string()),
             max_history: std::env::var("MAX_HISTORY")
+                .ok()
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(10),
+            // 流式输出配置
+            streaming_enabled: std::env::var("STREAMING_ENABLED")
+                .ok()
+                .map(|s| s.to_lowercase() != "false")
+                .unwrap_or(true),
+            streaming_min_interval_ms: std::env::var("STREAMING_MIN_INTERVAL_MS")
+                .ok()
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(500),
+            streaming_min_chars: std::env::var("STREAMING_MIN_CHARS")
                 .ok()
                 .and_then(|s| s.parse().ok())
                 .unwrap_or(10),

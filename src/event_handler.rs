@@ -1,9 +1,15 @@
+use std::time::{Duration, Instant};
+
 use anyhow::Result;
+use futures_util::StreamExt;
 use matrix_sdk::{
     Client, Room,
     ruma::{
-        OwnedUserId,
-        events::room::member::{MembershipState, StrippedRoomMemberEvent},
+        OwnedEventId, OwnedUserId,
+        events::room::{
+            member::{MembershipState, StrippedRoomMemberEvent},
+            message::{RoomMessageEventContent, ReplacementMetadata},
+        },
     },
 };
 use tracing::{debug, info, warn};
@@ -16,6 +22,10 @@ pub struct EventHandler {
     ai_service: AiService,
     bot_user_id: OwnedUserId,
     command_prefix: String,
+    // 流式输出配置
+    streaming_enabled: bool,
+    streaming_min_interval: Duration,
+    streaming_min_chars: usize,
 }
 
 impl EventHandler {
@@ -24,6 +34,9 @@ impl EventHandler {
             ai_service,
             bot_user_id,
             command_prefix: config.command_prefix.clone(),
+            streaming_enabled: config.streaming_enabled,
+            streaming_min_interval: Duration::from_millis(config.streaming_min_interval_ms),
+            streaming_min_chars: config.streaming_min_chars,
         }
     }
 
@@ -60,8 +73,6 @@ impl EventHandler {
         ev: matrix_sdk::ruma::events::room::message::SyncRoomMessageEvent,
         room: Room,
     ) -> Result<()> {
-        use matrix_sdk::ruma::events::room::message::RoomMessageEventContent;
-
         // 使用 as_original() 获取原始消息事件
         let original = match ev.as_original() {
             Some(o) => o,
@@ -122,8 +133,26 @@ impl EventHandler {
 
         debug!("处理消息 [{}]: {}", session_id, clean_text);
 
-        // 调用 AI
-        match self.ai_service.chat(&session_id, &clean_text).await {
+        // 根据配置选择流式或普通响应
+        if self.streaming_enabled {
+            self.handle_streaming_response(&room, &session_id, &clean_text)
+                .await?;
+        } else {
+            self.handle_normal_response(&room, &session_id, &clean_text)
+                .await?;
+        }
+
+        Ok(())
+    }
+
+    /// 普通响应（非流式）
+    async fn handle_normal_response(
+        &self,
+        room: &Room,
+        session_id: &str,
+        clean_text: &str,
+    ) -> Result<()> {
+        match self.ai_service.chat(session_id, clean_text).await {
             Ok(reply) => {
                 room.send(RoomMessageEventContent::text_plain(reply))
                     .await?;
@@ -136,6 +165,120 @@ impl EventHandler {
                 )))
                 .await?;
             }
+        }
+        Ok(())
+    }
+
+    /// 流式响应（打字机效果）
+    async fn handle_streaming_response(
+        &self,
+        room: &Room,
+        session_id: &str,
+        clean_text: &str,
+    ) -> Result<()> {
+        // 开始流式聊天
+        let (state, mut stream) = match self.ai_service.chat_stream(session_id, clean_text).await {
+            Ok(result) => result,
+            Err(e) => {
+                warn!("流式 AI 调用初始化失败: {}", e);
+                room.send(RoomMessageEventContent::text_plain(format!(
+                    "AI 服务暂时不可用: {}",
+                    e
+                )))
+                .await?;
+                return Ok(());
+            }
+        };
+
+        // 状态追踪
+        let mut event_id: Option<OwnedEventId> = None;
+        let mut chars_since_update: usize = 0;
+        let mut last_update = Instant::now();
+
+        // 消费流
+        while let Some(chunk_result) = stream.next().await {
+            match chunk_result {
+                Ok(delta) => {
+                    chars_since_update += delta.chars().count();
+
+                    // 检查是否需要更新消息（混合策略）
+                    let time_elapsed = last_update.elapsed() >= self.streaming_min_interval;
+                    let chars_accumulated = chars_since_update >= self.streaming_min_chars;
+
+                    if time_elapsed || chars_accumulated {
+                        // 获取当前累积的内容
+                        let content = {
+                            let s = state.lock().await;
+                            s.content().to_string()
+                        };
+
+                        // 发送或编辑消息
+                        if let Some(ref original_event_id) = event_id {
+                            // 编辑已有消息
+                            let metadata = ReplacementMetadata::new(original_event_id.clone(), None);
+                            let msg_content = RoomMessageEventContent::text_plain(&content)
+                                .make_replacement(metadata);
+                            room.send(msg_content).await?;
+                        } else {
+                            // 发送新消息
+                            let response = room
+                                .send(RoomMessageEventContent::text_plain(&content))
+                                .await?;
+                            event_id = Some(response.event_id);
+                        }
+
+                        // 重置计数器
+                        chars_since_update = 0;
+                        last_update = Instant::now();
+                    }
+                }
+                Err(e) => {
+                    warn!("流式响应错误: {}", e);
+                    // 如果已经发送了一些内容，显示错误
+                    let content = {
+                        let s = state.lock().await;
+                        s.content().to_string()
+                    };
+
+                    if !content.is_empty() {
+                        let error_msg = format!("{}\n\n[错误: {}]", content, e);
+                        if let Some(ref original_event_id) = event_id {
+                            let metadata = ReplacementMetadata::new(original_event_id.clone(), None);
+                            let msg_content = RoomMessageEventContent::text_plain(&error_msg)
+                                .make_replacement(metadata);
+                            room.send(msg_content).await?;
+                        } else {
+                            room.send(RoomMessageEventContent::text_plain(&error_msg))
+                                .await?;
+                        }
+                    } else {
+                        room.send(RoomMessageEventContent::text_plain(format!(
+                            "AI 服务暂时不可用: {}",
+                            e
+                        )))
+                        .await?;
+                    }
+                    return Ok(());
+                }
+            }
+        }
+
+        // 流结束，发送最终消息（如果有残留内容）
+        let final_content = {
+            let s = state.lock().await;
+            s.content().to_string()
+        };
+
+        if !final_content.is_empty() {
+            if let Some(ref original_event_id) = event_id {
+                // 编辑为最终内容
+                let metadata = ReplacementMetadata::new(original_event_id.clone(), None);
+                let msg_content = RoomMessageEventContent::text_plain(&final_content)
+                    .make_replacement(metadata);
+                room.send(msg_content).await?;
+            }
+            // 如果 event_id 为 None，说明从未发送过消息（流立即结束且内容为空或被过滤）
+            // 这种情况理论上不应该发生，因为上面已经在消费流时处理了
         }
 
         Ok(())
