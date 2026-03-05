@@ -1,76 +1,29 @@
-use std::time::{Duration, Instant};
+//! Matrix 消息事件处理。
+//!
+//! 提供房间邀请处理和消息响应功能。
+
+mod extract;
+mod invite;
+mod streaming;
+
+pub use invite::handle_invite;
+
+use std::time::Duration;
 
 use anyhow::Result;
-use futures_util::StreamExt;
 use matrix_sdk::{
     Client, Room,
     ruma::{
-        OwnedEventId, OwnedUserId,
-        events::{
-            AnySyncTimelineEvent,
-            room::{
-                member::{MembershipState, StrippedRoomMemberEvent},
-                message::{MessageType, Relation, ReplacementMetadata, RoomMessageEventContent},
-            },
-        },
+        OwnedUserId,
+        events::room::message::{MessageType, ReplacementMetadata, RoomMessageEventContent},
     },
 };
-use tracing::{debug, info, warn};
+use tracing::{debug, warn};
 
 use crate::config::Config;
 use crate::media::download_image_as_base64;
 use crate::traits::AiServiceTrait;
-
-/// 处理房间邀请事件。
-///
-/// 当机器人收到加入房间的邀请时自动加入。这是独立函数而非方法，
-/// 以便在事件处理器注册时直接使用。
-///
-/// # Arguments
-///
-/// * `ev` - 房间成员事件（邀请）
-/// * `client` - Matrix 客户端实例
-/// * `room` - 发送邀请的房间
-///
-/// # Returns
-///
-/// 成功时返回 `Ok(())`，失败时返回错误。
-///
-/// # Example
-///
-/// ```ignore
-/// client.add_event_handler(
-///     |ev: StrippedRoomMemberEvent, client: Client, room: Room| async move {
-///         if let Err(e) = handle_invite(ev, client, room).await {
-///             tracing::error!("处理邀请失败: {}", e);
-///         }
-///     }
-/// );
-/// ```
-pub async fn handle_invite(ev: StrippedRoomMemberEvent, client: Client, room: Room) -> Result<()> {
-    // 只处理邀请事件，忽略其他成员状态变更
-    if ev.content.membership != MembershipState::Invite {
-        return Ok(());
-    }
-
-    let user_id = &ev.state_key;
-    let my_user_id = client.user_id().expect("user_id should be available");
-
-    // 只处理邀请自己的事件
-    if user_id != my_user_id {
-        return Ok(()); // 不是邀请机器人
-    }
-
-    let room_id = room.room_id();
-    info!("收到房间邀请: {}", room_id);
-
-    match client.join_room_by_id(room_id).await {
-        Ok(_) => info!("成功加入房间: {}", room_id),
-        Err(e) => warn!("加入房间失败: {}", e),
-    }
-
-    Ok(())
-}
+use streaming::StreamingHandler;
 
 /// Matrix 消息事件处理器。
 ///
@@ -109,19 +62,17 @@ pub async fn handle_invite(ev: StrippedRoomMemberEvent, client: Client, room: Ro
 #[derive(Clone)]
 pub struct EventHandler<T: AiServiceTrait> {
     /// AI 服务实例
-    ai_service: T,
+    pub(super) ai_service: T,
     /// Matrix 客户端（用于下载媒体）
-    client: Client,
+    pub(super) client: Client,
     /// 机器人的 Matrix 用户 ID
-    bot_user_id: OwnedUserId,
+    pub(super) bot_user_id: OwnedUserId,
     /// 命令前缀（如 `!ai`）
-    command_prefix: String,
+    pub(super) command_prefix: String,
     /// 是否启用流式输出
     streaming_enabled: bool,
-    /// 流式更新的最小时间间隔
-    streaming_min_interval: Duration,
-    /// 流式更新的最小字符数阈值
-    streaming_min_chars: usize,
+    /// 流式处理器
+    streaming_handler: StreamingHandler,
     /// 是否启用图片理解功能
     vision_enabled: bool,
     /// 图片最大尺寸（像素）
@@ -144,8 +95,10 @@ impl<T: AiServiceTrait> EventHandler<T> {
             bot_user_id,
             command_prefix: config.command_prefix.clone(),
             streaming_enabled: config.streaming_enabled,
-            streaming_min_interval: Duration::from_millis(config.streaming_min_interval_ms),
-            streaming_min_chars: config.streaming_min_chars,
+            streaming_handler: StreamingHandler::new(
+                Duration::from_millis(config.streaming_min_interval_ms),
+                config.streaming_min_chars,
+            ),
             vision_enabled: config.vision_enabled,
             vision_max_image_size: config.vision_max_image_size,
         }
@@ -283,7 +236,7 @@ impl<T: AiServiceTrait> EventHandler<T> {
                 // 图片消息处理（Vision API）
                 if self.vision_enabled {
                     debug!("处理图片消息 [{}]", session_id);
-                    self.handle_image_message(&room, &session_id, &original.sender, image_msg)
+                    self.handle_image_message(&room, &session_id, image_msg)
                         .await?;
                 }
             }
@@ -325,11 +278,7 @@ impl<T: AiServiceTrait> EventHandler<T> {
 
     /// 发送流式响应（打字机效果）。
     ///
-    /// 使用混合节流策略更新消息：
-    /// - 时间触发：超过最小间隔时更新
-    /// - 字符触发：累积超过最小字符数时更新
-    ///
-    /// 首次发送新消息，后续使用 Matrix 消息编辑 API 更新内容。
+    /// 使用 StreamingHandler 处理流式输出。
     async fn handle_streaming_response(
         &self,
         room: &Room,
@@ -337,7 +286,7 @@ impl<T: AiServiceTrait> EventHandler<T> {
         clean_text: &str,
     ) -> Result<()> {
         // 开始流式聊天
-        let (state, mut stream) = match self.ai_service.chat_stream(session_id, clean_text).await {
+        let (state, stream) = match self.ai_service.chat_stream(session_id, clean_text).await {
             Ok(result) => result,
             Err(e) => {
                 warn!("流式 AI 调用初始化失败: {}", e);
@@ -350,169 +299,7 @@ impl<T: AiServiceTrait> EventHandler<T> {
             }
         };
 
-        // 状态追踪
-        let mut event_id: Option<OwnedEventId> = None;
-        let mut chars_since_update: usize = 0;
-        let mut last_update = Instant::now();
-
-        // 消费流
-        while let Some(chunk_result) = stream.next().await {
-            match chunk_result {
-                Ok(delta) => {
-                    chars_since_update += delta.chars().count();
-
-                    // 混合节流策略：时间或字符数任一满足即更新
-                    let time_elapsed = last_update.elapsed() >= self.streaming_min_interval;
-                    let chars_accumulated = chars_since_update >= self.streaming_min_chars;
-
-                    if time_elapsed || chars_accumulated {
-                        // 获取当前累积的完整内容
-                        let content = {
-                            let s = state.lock().await;
-                            s.content().to_string()
-                        };
-
-                        // 发送或编辑消息
-                        if let Some(ref original_event_id) = event_id {
-                            // 使用 Matrix 消息编辑 API 更新已有消息
-                            let metadata =
-                                ReplacementMetadata::new(original_event_id.clone(), None);
-                            let msg_content = RoomMessageEventContent::text_plain(&content)
-                                .make_replacement(metadata);
-                            room.send(msg_content).await?;
-                        } else {
-                            // 首次发送新消息
-                            let response = room
-                                .send(RoomMessageEventContent::text_plain(&content))
-                                .await?;
-                            event_id = Some(response.event_id);
-                        }
-
-                        // 重置节流计数器
-                        chars_since_update = 0;
-                        last_update = Instant::now();
-                    }
-                }
-                Err(e) => {
-                    warn!("流式响应错误: {}", e);
-                    // 优雅处理错误：显示已接收内容并追加错误信息
-                    let content = {
-                        let s = state.lock().await;
-                        s.content().to_string()
-                    };
-
-                    if !content.is_empty() {
-                        // 已有内容，追加错误信息
-                        let error_msg = format!("{}\n\n[错误: {}]", content, e);
-                        if let Some(ref original_event_id) = event_id {
-                            let metadata =
-                                ReplacementMetadata::new(original_event_id.clone(), None);
-                            let msg_content = RoomMessageEventContent::text_plain(&error_msg)
-                                .make_replacement(metadata);
-                            room.send(msg_content).await?;
-                        } else {
-                            room.send(RoomMessageEventContent::text_plain(&error_msg))
-                                .await?;
-                        }
-                    } else {
-                        // 无内容，仅显示错误
-                        room.send(RoomMessageEventContent::text_plain(format!(
-                            "AI 服务暂时不可用: {}",
-                            e
-                        )))
-                        .await?;
-                    }
-                    return Ok(());
-                }
-            }
-        }
-
-        // 流结束，确保发送最终内容（处理最后可能残留的更新）
-        let final_content = {
-            let s = state.lock().await;
-            s.content().to_string()
-        };
-
-        if !final_content.is_empty()
-            && let Some(ref original_event_id) = event_id
-        {
-            let metadata = ReplacementMetadata::new(original_event_id.clone(), None);
-            let msg_content =
-                RoomMessageEventContent::text_plain(&final_content).make_replacement(metadata);
-            room.send(msg_content).await?;
-        }
-
-        Ok(())
-    }
-
-    /// 从消息中提取引用内容。
-    ///
-    /// 如果消息是回复消息（包含 `relates_to` 字段），则通过 Room API 获取
-    /// 被引用的事件，并提取其消息文本。
-    ///
-    /// # Arguments
-    ///
-    /// * `room` - 消息所在的房间
-    /// * `original` - 原始消息事件
-    ///
-    /// # Returns
-    ///
-    /// 成功时返回被引用消息的文本内容，失败或无引用时返回 `None`。
-    async fn extract_reply_content(
-        &self,
-        room: &Room,
-        original: &matrix_sdk::ruma::events::room::message::OriginalSyncRoomMessageEvent,
-    ) -> Option<String> {
-        // 检查是否是回复消息
-        let in_reply_to = original.content.relates_to.as_ref().and_then(|r| match r {
-            Relation::Reply { in_reply_to } => Some(&in_reply_to.event_id),
-            _ => None,
-        })?;
-
-        // 通过 Room API 获取被引用的事件
-        let event = room.load_or_fetch_event(in_reply_to, None).await.ok()?;
-
-        // 反序列化事件
-        let timeline_event = event.into_raw().deserialize().ok()?;
-
-        // 提取消息文本
-        match timeline_event {
-            AnySyncTimelineEvent::MessageLike(msg) => {
-                // 获取事件的原始内容（非删除状态）
-                msg.original_content().and_then(|c| match c {
-                    matrix_sdk::ruma::events::AnyMessageLikeEventContent::RoomMessage(m) => {
-                        Some(m.msgtype.body().to_string())
-                    }
-                    _ => None,
-                })
-            }
-            _ => None,
-        }
-    }
-
-    /// 从原始消息文本中提取纯净的消息内容。
-    ///
-    /// 移除命令前缀和 @提及，返回修剪后的文本。
-    ///
-    /// # Arguments
-    ///
-    /// * `text` - 原始消息文本
-    ///
-    /// # Returns
-    ///
-    /// 移除前缀和提及后的纯净文本
-    fn extract_message(&self, text: &str) -> String {
-        let mut result = text.to_string();
-
-        // 移除命令前缀（如 `!ai`）
-        if result.starts_with(&self.command_prefix) {
-            result = result[self.command_prefix.len()..].to_string();
-        }
-
-        // 移除 @提及（兼容旧客户端）
-        result = result.replace(&self.bot_user_id.to_string(), "");
-
-        result.trim().to_string()
+        self.streaming_handler.handle(room, state, stream).await
     }
 
     /// 处理图片消息（Vision API）。
@@ -523,13 +310,11 @@ impl<T: AiServiceTrait> EventHandler<T> {
     ///
     /// * `room` - 消息所在的房间
     /// * `session_id` - 会话标识符
-    /// * `sender` - 发送者 ID
     /// * `image_msg` - 图片消息内容
     async fn handle_image_message(
         &self,
         room: &Room,
         session_id: &str,
-        _sender: &matrix_sdk::ruma::OwnedUserId,
         image_msg: &matrix_sdk::ruma::events::room::message::ImageMessageEventContent,
     ) -> Result<()> {
         // 获取图片 URL（从 source 字段）
@@ -555,20 +340,26 @@ impl<T: AiServiceTrait> EventHandler<T> {
             .and_then(|i| i.mimetype.as_deref())
             .unwrap_or("image/png");
 
-        let image_data_url =
-            match download_image_as_base64(&self.client, mxc_uri, Some(media_type), self.vision_max_image_size).await {
-                Ok(data) => data,
-                Err(e) => {
-                    warn!("下载图片失败: {}", e);
-                    // 编辑处理中消息为错误提示
-                    let metadata = ReplacementMetadata::new(processing_msg.event_id.clone(), None);
-                    let error_content =
-                        RoomMessageEventContent::text_plain(format!("下载图片失败: {}", e))
-                            .make_replacement(metadata);
-                    room.send(error_content).await?;
-                    return Ok(());
-                }
-            };
+        let image_data_url = match download_image_as_base64(
+            &self.client,
+            mxc_uri,
+            Some(media_type),
+            self.vision_max_image_size,
+        )
+        .await
+        {
+            Ok(data) => data,
+            Err(e) => {
+                warn!("下载图片失败: {}", e);
+                // 编辑处理中消息为错误提示
+                let metadata = ReplacementMetadata::new(processing_msg.event_id.clone(), None);
+                let error_content =
+                    RoomMessageEventContent::text_plain(format!("下载图片失败: {}", e))
+                        .make_replacement(metadata);
+                room.send(error_content).await?;
+                return Ok(());
+            }
+        };
 
         // 获取图片说明作为提示词
         let text = if image_msg.body.trim().is_empty() {
@@ -616,17 +407,17 @@ impl<T: AiServiceTrait> EventHandler<T> {
 
     /// 发送图片的流式响应（Vision API）。
     ///
-    /// 使用混合节流策略更新消息。
+    /// 使用 StreamingHandler 处理流式输出。
     async fn handle_image_streaming_response(
         &self,
         room: &Room,
         session_id: &str,
         text: &str,
         image_data_url: &str,
-        processing_event_id: OwnedEventId,
+        processing_event_id: matrix_sdk::ruma::OwnedEventId,
     ) -> Result<()> {
         // 开始流式聊天
-        let (state, mut stream) = match self
+        let (state, stream) = match self
             .ai_service
             .chat_with_image_stream(session_id, text, image_data_url)
             .await
@@ -643,82 +434,9 @@ impl<T: AiServiceTrait> EventHandler<T> {
             }
         };
 
-        // 状态追踪
-        let event_id: Option<OwnedEventId> = Some(processing_event_id);
-        let mut chars_since_update: usize = 0;
-        let mut last_update = Instant::now();
-
-        // 消费流
-        while let Some(chunk_result) = stream.next().await {
-            match chunk_result {
-                Ok(delta) => {
-                    chars_since_update += delta.chars().count();
-
-                    let time_elapsed = last_update.elapsed() >= self.streaming_min_interval;
-                    let chars_accumulated = chars_since_update >= self.streaming_min_chars;
-
-                    if time_elapsed || chars_accumulated {
-                        let content = {
-                            let s = state.lock().await;
-                            s.content().to_string()
-                        };
-
-                        if let Some(ref original_event_id) = event_id {
-                            let metadata =
-                                ReplacementMetadata::new(original_event_id.clone(), None);
-                            let msg_content = RoomMessageEventContent::text_plain(&content)
-                                .make_replacement(metadata);
-                            room.send(msg_content).await?;
-                        }
-
-                        chars_since_update = 0;
-                        last_update = Instant::now();
-                    }
-                }
-                Err(e) => {
-                    warn!("Vision 流式响应错误: {}", e);
-                    let content = {
-                        let s = state.lock().await;
-                        s.content().to_string()
-                    };
-
-                    if !content.is_empty() {
-                        let error_msg = format!("{}\n\n[错误: {}]", content, e);
-                        if let Some(ref original_event_id) = event_id {
-                            let metadata =
-                                ReplacementMetadata::new(original_event_id.clone(), None);
-                            let msg_content = RoomMessageEventContent::text_plain(&error_msg)
-                                .make_replacement(metadata);
-                            room.send(msg_content).await?;
-                        }
-                    } else if let Some(ref original_event_id) = event_id {
-                        let metadata = ReplacementMetadata::new(original_event_id.clone(), None);
-                        let error_content =
-                            RoomMessageEventContent::text_plain(format!("图片分析失败: {}", e))
-                                .make_replacement(metadata);
-                        room.send(error_content).await?;
-                    }
-                    return Ok(());
-                }
-            }
-        }
-
-        // 流结束，发送最终内容
-        let final_content = {
-            let s = state.lock().await;
-            s.content().to_string()
-        };
-
-        if !final_content.is_empty()
-            && let Some(ref original_event_id) = event_id
-        {
-            let metadata = ReplacementMetadata::new(original_event_id.clone(), None);
-            let msg_content =
-                RoomMessageEventContent::text_plain(&final_content).make_replacement(metadata);
-            room.send(msg_content).await?;
-        }
-
-        Ok(())
+        self.streaming_handler
+            .handle_with_initial_event(room, state, stream, processing_event_id)
+            .await
     }
 }
 
@@ -726,6 +444,7 @@ impl<T: AiServiceTrait> EventHandler<T> {
 mod tests {
     use super::*;
     use crate::config::Config;
+    use crate::traits::AiServiceTrait;
     use matrix_sdk::ruma::user_id;
 
     // 用于测试的 mock AiService
@@ -744,7 +463,7 @@ mod tests {
             _session_id: &str,
             _prompt: &str,
         ) -> anyhow::Result<(
-            std::sync::Arc<tokio::sync::Mutex<crate::ai_service::StreamingState>>,
+            std::sync::Arc<tokio::sync::Mutex<crate::traits::StreamingState>>,
             std::pin::Pin<Box<dyn futures_util::Stream<Item = anyhow::Result<String>> + Send>>,
         )> {
             unimplemented!()
@@ -765,7 +484,7 @@ mod tests {
             _text: &str,
             _image_data_url: &str,
         ) -> anyhow::Result<(
-            std::sync::Arc<tokio::sync::Mutex<crate::ai_service::StreamingState>>,
+            std::sync::Arc<tokio::sync::Mutex<crate::traits::StreamingState>>,
             std::pin::Pin<Box<dyn futures_util::Stream<Item = anyhow::Result<String>> + Send>>,
         )> {
             unimplemented!()
@@ -800,10 +519,6 @@ mod tests {
         // 实际集成测试需要 mock Matrix 客户端
         unimplemented!("需要 mock Client 进行测试")
     }
-
-    // 暂时跳过需要 create_test_handler 的测试
-    // 这些测试需要 mock Matrix 客户端
-    // extract_message 的逻辑很简单，可以手动测试或使用集成测试
 
     // 简单单元测试 extract_message 逻辑
     #[test]

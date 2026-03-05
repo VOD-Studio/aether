@@ -3,7 +3,53 @@ use futures_util::Stream;
 use std::{future::Future, pin::Pin, sync::Arc};
 use tokio::sync::Mutex;
 
-use crate::ai_service::StreamingState;
+/// 流式响应的状态追踪。
+///
+/// 在流式响应过程中累积所有已接收的文本片段，
+/// 允许消费者随时获取当前累积的完整内容。
+///
+/// # Thread Safety
+///
+/// 通常与 `Arc<Mutex<StreamingState>>` 配合使用，
+/// 确保流生产者和消费者之间的安全共享。
+///
+/// # Example
+///
+/// ```
+/// use aether_matrix::traits::StreamingState;
+///
+/// let mut state = StreamingState::new();
+/// state.append("Hello");
+/// state.append(" World");
+///
+/// assert_eq!(state.content(), "Hello World");
+/// ```
+#[derive(Default)]
+pub struct StreamingState {
+    /// 累积的完整响应内容
+    pub accumulated: String,
+}
+
+impl StreamingState {
+    /// 创建新的空状态。
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// 追加新的文本片段。
+    ///
+    /// # Arguments
+    ///
+    /// * `delta` - 新收到的文本片段
+    pub fn append(&mut self, delta: &str) {
+        self.accumulated.push_str(delta);
+    }
+
+    /// 获取当前累积的完整内容。
+    pub fn content(&self) -> &str {
+        &self.accumulated
+    }
+}
 
 /// 流式聊天的响应类型。
 ///
