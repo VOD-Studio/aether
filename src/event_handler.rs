@@ -14,12 +14,39 @@ use matrix_sdk::{
 };
 use tracing::{debug, info, warn};
 
-use crate::ai_service::AiService;
 use crate::config::Config;
+use crate::traits::AiServiceTrait;
+
+/// 处理房间邀请（独立函数，不依赖 EventHandler 实例）
+pub async fn handle_invite(
+    ev: StrippedRoomMemberEvent,
+    client: Client,
+    room: Room,
+) -> Result<()> {
+    if ev.content.membership != MembershipState::Invite {
+        return Ok(());
+    }
+
+    let user_id = &ev.state_key;
+    let my_user_id = client.user_id().expect("user_id should be available");
+    if user_id != my_user_id {
+        return Ok(()); // 不是邀请机器人
+    }
+
+    let room_id = room.room_id();
+    info!("收到房间邀请: {}", room_id);
+
+    match client.join_room_by_id(room_id).await {
+        Ok(_) => info!("成功加入房间: {}", room_id),
+        Err(e) => warn!("加入房间失败: {}", e),
+    }
+
+    Ok(())
+}
 
 #[derive(Clone)]
-pub struct EventHandler {
-    ai_service: AiService,
+pub struct EventHandler<T: AiServiceTrait> {
+    ai_service: T,
     bot_user_id: OwnedUserId,
     command_prefix: String,
     // 流式输出配置
@@ -28,8 +55,8 @@ pub struct EventHandler {
     streaming_min_chars: usize,
 }
 
-impl EventHandler {
-    pub fn new(ai_service: AiService, bot_user_id: OwnedUserId, config: &Config) -> Self {
+impl<T: AiServiceTrait> EventHandler<T> {
+    pub fn new(ai_service: T, bot_user_id: OwnedUserId, config: &Config) -> Self {
         Self {
             ai_service,
             bot_user_id,
@@ -38,33 +65,6 @@ impl EventHandler {
             streaming_min_interval: Duration::from_millis(config.streaming_min_interval_ms),
             streaming_min_chars: config.streaming_min_chars,
         }
-    }
-
-    /// 处理房间邀请
-    pub async fn handle_invite(
-        ev: StrippedRoomMemberEvent,
-        client: Client,
-        room: Room,
-    ) -> Result<()> {
-        if ev.content.membership != MembershipState::Invite {
-            return Ok(());
-        }
-
-        let user_id = &ev.state_key;
-        let my_user_id = client.user_id().expect("user_id should be available");
-        if user_id != my_user_id {
-            return Ok(()); // 不是邀请机器人
-        }
-
-        let room_id = room.room_id();
-        info!("收到房间邀请: {}", room_id);
-
-        match client.join_room_by_id(room_id).await {
-            Ok(_) => info!("成功加入房间: {}", room_id),
-            Err(e) => warn!("加入房间失败: {}", e),
-        }
-
-        Ok(())
     }
 
     /// 处理消息
@@ -306,5 +306,100 @@ impl EventHandler {
         result = result.replace(&self.bot_user_id.to_string(), "");
 
         result.trim().to_string()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::Config;
+    use matrix_sdk::ruma::user_id;
+
+    // 用于测试的 mock AiService
+    #[derive(Clone)]
+    struct MockAiService;
+
+    #[async_trait::async_trait]
+    impl AiServiceTrait for MockAiService {
+        async fn chat(&self, _session_id: &str, _prompt: &str) -> anyhow::Result<String> {
+            Ok("mock response".to_string())
+        }
+
+        async fn reset_conversation(&self, _session_id: &str) {}
+
+        async fn chat_stream(
+            &self,
+            _session_id: &str,
+            _prompt: &str,
+        ) -> anyhow::Result<(
+            std::sync::Arc<tokio::sync::Mutex<crate::ai_service::StreamingState>>,
+            std::pin::Pin<Box<dyn futures_util::Stream<Item = anyhow::Result<String>> + Send>>,
+        )> {
+            unimplemented!()
+        }
+    }
+
+    fn create_test_handler() -> EventHandler<MockAiService> {
+        let config = Config {
+            matrix_homeserver: "https://matrix.org".to_string(),
+            matrix_username: "test".to_string(),
+            matrix_password: "test".to_string(),
+            matrix_device_id: None,
+            openai_api_key: "test".to_string(),
+            openai_base_url: "https://api.openai.com/v1".to_string(),
+            openai_model: "gpt-4o-mini".to_string(),
+            system_prompt: None,
+            command_prefix: "!ai ".to_string(),
+            max_history: 10,
+            streaming_enabled: false,
+            streaming_min_interval_ms: 500,
+            streaming_min_chars: 10,
+            log_level: "info".to_string(),
+            device_display_name: "Test Bot".to_string(),
+        };
+        let bot_user_id = user_id!("@bot:matrix.org").to_owned();
+        EventHandler::new(MockAiService, bot_user_id, &config)
+    }
+
+    #[test]
+    fn test_extract_message_with_prefix() {
+        let handler = create_test_handler();
+        let result = handler.extract_message("!ai Hello world");
+        assert_eq!(result, "Hello world");
+    }
+
+    #[test]
+    fn test_extract_message_with_prefix_and_spaces() {
+        let handler = create_test_handler();
+        let result = handler.extract_message("!ai   Multiple spaces   ");
+        assert_eq!(result, "Multiple spaces");
+    }
+
+    #[test]
+    fn test_extract_message_with_mention() {
+        let handler = create_test_handler();
+        let result = handler.extract_message("@bot:matrix.org Hello there");
+        assert_eq!(result, "Hello there");
+    }
+
+    #[test]
+    fn test_extract_message_with_prefix_and_mention() {
+        let handler = create_test_handler();
+        let result = handler.extract_message("!ai @bot:matrix.org Combined message");
+        assert_eq!(result, "Combined message");
+    }
+
+    #[test]
+    fn test_extract_message_plain_text() {
+        let handler = create_test_handler();
+        let result = handler.extract_message("Just a plain message");
+        assert_eq!(result, "Just a plain message");
+    }
+
+    #[test]
+    fn test_extract_message_empty_after_trim() {
+        let handler = create_test_handler();
+        let result = handler.extract_message("!ai    ");
+        assert_eq!(result, "");
     }
 }

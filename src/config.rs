@@ -28,6 +28,28 @@ pub struct Config {
     pub log_level: String,
 }
 
+impl Default for Config {
+    fn default() -> Self {
+        Self {
+            matrix_homeserver: "https://matrix.org".to_string(),
+            matrix_username: String::new(),
+            matrix_password: String::new(),
+            matrix_device_id: None,
+            device_display_name: "AI Bot".to_string(),
+            openai_api_key: String::new(),
+            openai_base_url: "https://api.openai.com/v1".to_string(),
+            openai_model: "gpt-4o-mini".to_string(),
+            system_prompt: None,
+            command_prefix: "!ai".to_string(),
+            max_history: 10,
+            streaming_enabled: true,
+            streaming_min_interval_ms: 1000,
+            streaming_min_chars: 50,
+            log_level: "info".to_string(),
+        }
+    }
+}
+
 impl Config {
     pub fn from_env() -> Result<Self> {
         // 加载 .env 文件（如果存在）

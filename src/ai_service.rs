@@ -6,10 +6,12 @@ use anyhow::Result;
 use async_openai::Client;
 use async_openai::config::OpenAIConfig;
 use async_openai::types::chat::CreateChatCompletionRequest;
+use async_trait::async_trait;
 use futures_util::{Stream, StreamExt};
 
 use crate::config::Config;
 use crate::conversation::ConversationManager;
+use crate::traits::AiServiceTrait;
 
 #[derive(Clone)]
 pub struct AiService {
@@ -185,5 +187,60 @@ impl AiService {
         });
 
         Ok((state, Box::pin(wrapped_stream)))
+    }
+}
+
+#[async_trait]
+impl AiServiceTrait for AiService {
+    async fn chat(&self, session_id: &str, prompt: &str) -> Result<String> {
+        self.chat(session_id, prompt).await
+    }
+
+    async fn reset_conversation(&self, session_id: &str) {
+        self.reset_conversation(session_id).await
+    }
+
+    async fn chat_stream(
+        &self,
+        session_id: &str,
+        prompt: &str,
+    ) -> Result<(
+        Arc<Mutex<StreamingState>>,
+        Pin<Box<dyn Stream<Item = Result<String>> + Send>>,
+    )> {
+        self.chat_stream(session_id, prompt).await
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_streaming_state_new() {
+        let state = StreamingState::new();
+        assert!(state.content().is_empty());
+    }
+
+    #[test]
+    fn test_streaming_state_append() {
+        let mut state = StreamingState::new();
+        state.append("Hello");
+        assert_eq!(state.content(), "Hello");
+
+        state.append(" World");
+        assert_eq!(state.content(), "Hello World");
+    }
+
+    #[test]
+    fn test_streaming_state_multiple_appends() {
+        let mut state = StreamingState::new();
+        state.append("First");
+        state.append(" ");
+        state.append("Second");
+        state.append(" ");
+        state.append("Third");
+
+        assert_eq!(state.content(), "First Second Third");
     }
 }

@@ -6,12 +6,12 @@ use tracing::info;
 
 use crate::ai_service::AiService;
 use crate::config::Config;
-use crate::event_handler::EventHandler;
+use crate::event_handler::{EventHandler, handle_invite};
 
 /// Matrix AI 机器人
 pub struct Bot {
     client: Client,
-    handler: EventHandler,
+    handler: EventHandler<AiService>,
 }
 
 impl Bot {
@@ -63,7 +63,7 @@ impl Bot {
         // 注册邀请事件处理器
         self.client.add_event_handler(
             |ev: StrippedRoomMemberEvent, client: Client, room: matrix_sdk::Room| async move {
-                if let Err(e) = EventHandler::handle_invite(ev, client, room).await {
+                if let Err(e) = handle_invite(ev, client, room).await {
                     tracing::error!("处理邀请失败: {}", e);
                 }
             },

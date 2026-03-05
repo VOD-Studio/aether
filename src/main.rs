@@ -3,6 +3,7 @@ mod bot;
 mod config;
 mod conversation;
 mod event_handler;
+mod traits;
 
 use anyhow::Result;
 use tracing::info;
