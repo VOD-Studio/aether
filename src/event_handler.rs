@@ -319,7 +319,6 @@ mod tests {
     #[derive(Clone)]
     struct MockAiService;
 
-    #[async_trait::async_trait]
     impl AiServiceTrait for MockAiService {
         async fn chat(&self, _session_id: &str, _prompt: &str) -> anyhow::Result<String> {
             Ok("mock response".to_string())

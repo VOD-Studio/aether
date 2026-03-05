@@ -1,0 +1,2 @@
+- [ ] MCP Support
+- [ ] View image

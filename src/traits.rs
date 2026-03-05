@@ -1,13 +1,11 @@
 use std::{pin::Pin, sync::Arc};
 use anyhow::Result;
-use async_trait::async_trait;
 use futures_util::Stream;
 use tokio::sync::Mutex;
 
 use crate::ai_service::StreamingState;
 
 /// AI 服务的 trait 抽象，用于支持 mock 测试
-#[async_trait]
 pub trait AiServiceTrait: Clone + Send + Sync + 'static {
     /// 普通聊天
     async fn chat(&self, session_id: &str, prompt: &str) -> Result<String>;

@@ -6,7 +6,6 @@ use anyhow::Result;
 use async_openai::Client;
 use async_openai::config::OpenAIConfig;
 use async_openai::types::chat::CreateChatCompletionRequest;
-use async_trait::async_trait;
 use futures_util::{Stream, StreamExt};
 
 use crate::config::Config;
@@ -190,7 +189,6 @@ impl AiService {
     }
 }
 
-#[async_trait]
 impl AiServiceTrait for AiService {
     async fn chat(&self, session_id: &str, prompt: &str) -> Result<String> {
         self.chat(session_id, prompt).await
