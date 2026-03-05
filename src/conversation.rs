@@ -98,14 +98,12 @@ mod tests {
         assert_eq!(messages.len(), 1);
 
         match &messages[0] {
-            ChatCompletionRequestMessage::User(msg) => {
-                match &msg.content {
-                    async_openai::types::chat::ChatCompletionRequestUserMessageContent::Text(text) => {
-                        assert_eq!(text, "Hello");
-                    }
-                    _ => panic!("Expected text content"),
+            ChatCompletionRequestMessage::User(msg) => match &msg.content {
+                async_openai::types::chat::ChatCompletionRequestUserMessageContent::Text(text) => {
+                    assert_eq!(text, "Hello");
                 }
-            }
+                _ => panic!("Expected text content"),
+            },
             _ => panic!("Expected user message"),
         }
     }
@@ -120,14 +118,12 @@ mod tests {
         assert_eq!(messages.len(), 2);
 
         match &messages[1] {
-            ChatCompletionRequestMessage::Assistant(msg) => {
-                match &msg.content {
-                    Some(ChatCompletionRequestAssistantMessageContent::Text(text)) => {
-                        assert_eq!(text, "Hi there!");
-                    }
-                    _ => panic!("Expected text content"),
+            ChatCompletionRequestMessage::Assistant(msg) => match &msg.content {
+                Some(ChatCompletionRequestAssistantMessageContent::Text(text)) => {
+                    assert_eq!(text, "Hi there!");
                 }
-            }
+                _ => panic!("Expected text content"),
+            },
             _ => panic!("Expected assistant message"),
         }
     }
@@ -150,14 +146,12 @@ mod tests {
 
         // 最新的消息应该被保留（第一条是 a1）
         match &messages[0] {
-            ChatCompletionRequestMessage::Assistant(msg) => {
-                match &msg.content {
-                    Some(ChatCompletionRequestAssistantMessageContent::Text(text)) => {
-                        assert_eq!(text, "a1");
-                    }
-                    _ => panic!("Expected text content"),
+            ChatCompletionRequestMessage::Assistant(msg) => match &msg.content {
+                Some(ChatCompletionRequestAssistantMessageContent::Text(text)) => {
+                    assert_eq!(text, "a1");
                 }
-            }
+                _ => panic!("Expected text content"),
+            },
             _ => panic!("Expected assistant message a1"),
         }
     }
@@ -183,14 +177,14 @@ mod tests {
         assert_eq!(messages.len(), 2);
 
         match &messages[0] {
-            ChatCompletionRequestMessage::System(msg) => {
-                match &msg.content {
-                    async_openai::types::chat::ChatCompletionRequestSystemMessageContent::Text(text) => {
-                        assert_eq!(text, "You are helpful.");
-                    }
-                    _ => panic!("Expected text content"),
+            ChatCompletionRequestMessage::System(msg) => match &msg.content {
+                async_openai::types::chat::ChatCompletionRequestSystemMessageContent::Text(
+                    text,
+                ) => {
+                    assert_eq!(text, "You are helpful.");
                 }
-            }
+                _ => panic!("Expected text content"),
+            },
             _ => panic!("Expected system message"),
         }
     }

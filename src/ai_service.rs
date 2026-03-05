@@ -1,4 +1,3 @@
-use std::pin::Pin;
 use std::sync::Arc;
 use tokio::sync::{Mutex, RwLock};
 
@@ -6,11 +5,11 @@ use anyhow::Result;
 use async_openai::Client;
 use async_openai::config::OpenAIConfig;
 use async_openai::types::chat::CreateChatCompletionRequest;
-use futures_util::{Stream, StreamExt};
+use futures_util::StreamExt;
 
 use crate::config::Config;
 use crate::conversation::ConversationManager;
-use crate::traits::AiServiceTrait;
+use crate::traits::{AiServiceTrait, ChatStreamResponse};
 
 #[derive(Clone)]
 pub struct AiService {
@@ -24,15 +23,14 @@ struct AiServiceInner {
 }
 
 /// 流式响应的状态追踪
+#[derive(Default)]
 pub struct StreamingState {
     pub accumulated: String,
 }
 
 impl StreamingState {
     pub fn new() -> Self {
-        Self {
-            accumulated: String::new(),
-        }
+        Self::default()
     }
 
     /// 追加新内容
@@ -109,14 +107,7 @@ impl AiService {
 
     /// 流式聊天
     /// 返回一个共享状态用于追踪累积内容，以及一个 Stream 用于消费
-    pub async fn chat_stream(
-        &self,
-        session_id: &str,
-        prompt: &str,
-    ) -> Result<(
-        Arc<Mutex<StreamingState>>,
-        Pin<Box<dyn Stream<Item = Result<String>> + Send>>,
-    )> {
+    pub async fn chat_stream(&self, session_id: &str, prompt: &str) -> Result<ChatStreamResponse> {
         // 添加用户消息到历史
         {
             let mut conv = self.inner.conversation.write().await;
@@ -198,14 +189,7 @@ impl AiServiceTrait for AiService {
         self.reset_conversation(session_id).await
     }
 
-    async fn chat_stream(
-        &self,
-        session_id: &str,
-        prompt: &str,
-    ) -> Result<(
-        Arc<Mutex<StreamingState>>,
-        Pin<Box<dyn Stream<Item = Result<String>> + Send>>,
-    )> {
+    async fn chat_stream(&self, session_id: &str, prompt: &str) -> Result<ChatStreamResponse> {
         self.chat_stream(session_id, prompt).await
     }
 }
