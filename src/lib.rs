@@ -11,12 +11,12 @@
 //!
 //! ## 模块结构
 //!
-//! - [`config`]: 配置管理，从环境变量加载所有配置项
+//! - [`config`][]: 配置管理，从环境变量加载所有配置项
 //! - [`traits`]: AI 服务的 trait 抽象，支持 mock 测试
-//! - [`conversation`]: 多用户/多房间的会话历史管理
+//! - [`conversation`][]: 多用户/多房间的会话历史管理
 //! - [`ai_service`]: OpenAI API 封装，支持普通和流式两种响应模式
 //! - [`event_handler`]: Matrix 事件处理，包括邀请和消息事件
-//! - [`bot`]: 机器人主逻辑，负责初始化和运行
+//! - [`bot`][]: 机器人主逻辑，负责初始化和运行
 
 pub mod ai_service;
 pub mod bot;

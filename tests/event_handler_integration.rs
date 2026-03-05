@@ -52,11 +52,7 @@ impl AiServiceTrait for MockAiService {
         *called = true;
     }
 
-    async fn chat_stream(
-        &self,
-        _session_id: &str,
-        _prompt: &str,
-    ) -> Result<ChatStreamResponse> {
+    async fn chat_stream(&self, _session_id: &str, _prompt: &str) -> Result<ChatStreamResponse> {
         // 不支持流式测试
         anyhow::bail!("Streaming not supported in mock")
     }

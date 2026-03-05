@@ -237,7 +237,10 @@ impl<T: AiServiceTrait> EventHandler<T> {
 
         // 组装完整 prompt
         let full_prompt = if let Some(ref reply) = reply_context {
-            debug!("处理消息 [{}] (引用: {}): {}", session_id, reply, clean_text);
+            debug!(
+                "处理消息 [{}] (引用: {}): {}",
+                session_id, reply, clean_text
+            );
             format!("[引用消息]: {}\n\n{}", reply, clean_text)
         } else {
             debug!("处理消息 [{}]: {}", session_id, clean_text);
@@ -439,13 +442,12 @@ impl<T: AiServiceTrait> EventHandler<T> {
         match timeline_event {
             AnySyncTimelineEvent::MessageLike(msg) => {
                 // 获取事件的原始内容（非删除状态）
-                msg.original_content()
-                    .and_then(|c| match c {
-                        matrix_sdk::ruma::events::AnyMessageLikeEventContent::RoomMessage(m) => {
-                            Some(m.msgtype.body().to_string())
-                        }
-                        _ => None,
-                    })
+                msg.original_content().and_then(|c| match c {
+                    matrix_sdk::ruma::events::AnyMessageLikeEventContent::RoomMessage(m) => {
+                        Some(m.msgtype.body().to_string())
+                    }
+                    _ => None,
+                })
             }
             _ => None,
         }

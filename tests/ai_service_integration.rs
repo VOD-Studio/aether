@@ -149,8 +149,7 @@ mod conversation_tests {
         Mock::given(method("POST"))
             .and(path("/chat/completions"))
             .respond_with(
-                ResponseTemplate::new(200)
-                    .set_body_json(mock_chat_success_response("Response")),
+                ResponseTemplate::new(200).set_body_json(mock_chat_success_response("Response")),
             )
             .mount(&server)
             .await;
@@ -181,8 +180,7 @@ mod conversation_tests {
         Mock::given(method("POST"))
             .and(path("/chat/completions"))
             .respond_with(
-                ResponseTemplate::new(200)
-                    .set_body_json(mock_chat_success_response("Response")),
+                ResponseTemplate::new(200).set_body_json(mock_chat_success_response("Response")),
             )
             .mount(&server)
             .await;
@@ -210,8 +208,7 @@ mod conversation_tests {
         Mock::given(method("POST"))
             .and(path("/chat/completions"))
             .respond_with(
-                ResponseTemplate::new(200)
-                    .set_body_json(mock_chat_success_response("OK")),
+                ResponseTemplate::new(200).set_body_json(mock_chat_success_response("OK")),
             )
             .mount(&server)
             .await;
@@ -265,8 +262,7 @@ mod trait_tests {
         Mock::given(method("POST"))
             .and(path("/chat/completions"))
             .respond_with(
-                ResponseTemplate::new(200)
-                    .set_body_json(mock_chat_success_response("OK")),
+                ResponseTemplate::new(200).set_body_json(mock_chat_success_response("OK")),
             )
             .mount(&server)
             .await;

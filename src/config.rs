@@ -30,7 +30,6 @@ use anyhow::Result;
 #[derive(Debug, Clone)]
 pub struct Config {
     // --- Matrix 配置 ---
-
     /// Matrix 服务器地址（必需）。
     ///
     /// 示例: `https://matrix.org`
@@ -61,7 +60,6 @@ pub struct Config {
     pub store_path: String,
 
     // --- AI API 配置 ---
-
     /// OpenAI API 密钥（必需）。
     pub openai_api_key: String,
 
@@ -81,7 +79,6 @@ pub struct Config {
     pub system_prompt: Option<String>,
 
     // --- 机器人配置 ---
-
     /// 命令前缀。
     ///
     /// 在群聊中触发 AI 响应的前缀，默认为 `!ai`。
@@ -94,7 +91,6 @@ pub struct Config {
     pub max_history: usize,
 
     // --- 流式输出配置 ---
-
     /// 是否启用流式输出。
     ///
     /// 启用后 AI 响应以打字机效果逐步显示。
@@ -111,7 +107,6 @@ pub struct Config {
     pub streaming_min_chars: usize,
 
     // --- 日志配置 ---
-
     /// 日志级别。
     ///
     /// 支持: `trace`, `debug`, `info`, `warn`, `error`
