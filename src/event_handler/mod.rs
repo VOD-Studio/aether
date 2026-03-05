@@ -197,7 +197,7 @@ impl<T: AiServiceTrait> EventHandler<T> {
                 if clean_text == "!help" {
                     let help_text = if self.vision_enabled {
                         format!(
-                            "可用命令:\n{} <消息> - 与 AI 对话\n发送图片 - 让 AI 分析图片内容\n!reset - 清除会话历史\n!help - 显示帮助",
+                            "可用命令:\n{} <消息> - 与 AI 对话\n发送图片 - 让 AI 分析图片内容\n回复图片 - 分析引用的图片\n!reset - 清除会话历史\n!help - 显示帮助",
                             self.command_prefix
                         )
                     } else {
@@ -211,25 +211,77 @@ impl<T: AiServiceTrait> EventHandler<T> {
                     return Ok(());
                 }
 
-                // 组装完整 prompt（包含引用上下文）
-                let full_prompt = if let Some(ref reply) = reply_context {
-                    debug!(
-                        "处理文本消息 [{}] (引用: {}): {}",
-                        session_id, reply, clean_text
-                    );
-                    format!("[引用消息]: {}\n\n{}", reply, clean_text)
-                } else {
-                    debug!("处理文本消息 [{}]: {}", session_id, clean_text);
-                    clean_text.clone()
-                };
+                // 根据引用内容类型选择处理方式
+                if let Some(ref reply) = reply_context {
+                    if reply.has_image() && self.vision_enabled {
+                        // 引用了图片，使用 Vision API
+                        let text = if clean_text.is_empty() {
+                            "请描述这张图片的内容。".to_string()
+                        } else {
+                            clean_text.clone()
+                        };
+                        let image_url = reply.image_data_url.as_ref().unwrap();
 
-                // 根据配置选择流式或普通响应
-                if self.streaming_enabled {
-                    self.handle_streaming_response(&room, &session_id, &full_prompt)
-                        .await?;
+                        debug!("处理引用图片消息 [{}] (引用图片): {}", session_id, text);
+
+                        if self.streaming_enabled {
+                            self.handle_image_streaming_response_without_initial(
+                                &room,
+                                &session_id,
+                                &text,
+                                image_url,
+                            )
+                            .await?;
+                        } else {
+                            match self
+                                .ai_service
+                                .chat_with_image(&session_id, &text, image_url)
+                                .await
+                            {
+                                Ok(reply_text) => {
+                                    room.send(RoomMessageEventContent::text_plain(reply_text))
+                                        .await?;
+                                }
+                                Err(e) => {
+                                    warn!("Vision API 调用失败: {}", e);
+                                    room.send(RoomMessageEventContent::text_plain(format!(
+                                        "图片分析失败: {}",
+                                        e
+                                    )))
+                                    .await?;
+                                }
+                            }
+                        }
+                    } else {
+                        // 只有文本引用
+                        debug!(
+                            "处理文本消息 [{}] (引用: {}): {}",
+                            session_id,
+                            reply.display_text(),
+                            clean_text
+                        );
+                        let full_prompt =
+                            format!("[引用消息]: {}\n\n{}", reply.display_text(), clean_text);
+
+                        if self.streaming_enabled {
+                            self.handle_streaming_response(&room, &session_id, &full_prompt)
+                                .await?;
+                        } else {
+                            self.handle_normal_response(&room, &session_id, &full_prompt)
+                                .await?;
+                        }
+                    }
                 } else {
-                    self.handle_normal_response(&room, &session_id, &full_prompt)
-                        .await?;
+                    // 无引用消息
+                    debug!("处理文本消息 [{}]: {}", session_id, clean_text);
+
+                    if self.streaming_enabled {
+                        self.handle_streaming_response(&room, &session_id, &clean_text)
+                            .await?;
+                    } else {
+                        self.handle_normal_response(&room, &session_id, &clean_text)
+                            .await?;
+                    }
                 }
             }
             MessageType::Image(image_msg) => {
@@ -437,6 +489,37 @@ impl<T: AiServiceTrait> EventHandler<T> {
         self.streaming_handler
             .handle_with_initial_event(room, state, stream, processing_event_id)
             .await
+    }
+
+    /// 发送引用图片的流式响应（无需初始处理消息）。
+    ///
+    /// 用于处理引用图片消息时，直接发送流式响应。
+    async fn handle_image_streaming_response_without_initial(
+        &self,
+        room: &Room,
+        session_id: &str,
+        text: &str,
+        image_data_url: &str,
+    ) -> Result<()> {
+        // 开始流式聊天
+        let (state, stream) = match self
+            .ai_service
+            .chat_with_image_stream(session_id, text, image_data_url)
+            .await
+        {
+            Ok(result) => result,
+            Err(e) => {
+                warn!("Vision API 流式调用初始化失败: {}", e);
+                room.send(RoomMessageEventContent::text_plain(format!(
+                    "图片分析失败: {}",
+                    e
+                )))
+                .await?;
+                return Ok(());
+            }
+        };
+
+        self.streaming_handler.handle(room, state, stream).await
     }
 }
 
