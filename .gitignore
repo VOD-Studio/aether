@@ -3,3 +3,4 @@
 .env.*
 /store/
 aether-matrix
+data/**/*.db
