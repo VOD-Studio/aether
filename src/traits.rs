@@ -145,6 +145,27 @@ pub trait AiServiceTrait: Clone + Send + Sync + 'static {
     /// - 服务端错误
     fn chat(&self, session_id: &str, prompt: &str) -> impl Future<Output = Result<String>> + Send;
 
+    /// 执行带自定义系统提示词的聊天。
+    ///
+    /// 与 [`chat`](AiServiceTrait::chat) 类似，但允许覆盖默认的系统提示词。
+    /// 适用于人设系统等需要动态改变 AI 行为的场景。
+    ///
+    /// # Arguments
+    ///
+    /// * `session_id` - 会话标识符
+    /// * `prompt` - 用户输入的消息内容
+    /// * `system_prompt` - 自定义系统提示词，如果为 None 则使用默认提示词
+    ///
+    /// # Returns
+    ///
+    /// 成功时返回 AI 的回复文本。
+    fn chat_with_system(
+        &self,
+        session_id: &str,
+        prompt: &str,
+        system_prompt: Option<&str>,
+    ) -> impl Future<Output = Result<String>> + Send;
+
     /// 重置指定会话的历史记录。
     ///
     /// 清除该会话的所有历史消息，但保留系统提示词。
@@ -177,6 +198,26 @@ pub trait AiServiceTrait: Clone + Send + Sync + 'static {
         &self,
         session_id: &str,
         prompt: &str,
+    ) -> impl Future<Output = Result<ChatStreamResponse>> + Send;
+
+    /// 执行带自定义系统提示词的流式聊天。
+    ///
+    /// 与 [`chat_with_system`](AiServiceTrait::chat_with_system) 类似，但返回流式响应。
+    ///
+    /// # Arguments
+    ///
+    /// * `session_id` - 会话标识符
+    /// * `prompt` - 用户输入的消息内容
+    /// * `system_prompt` - 自定义系统提示词，如果为 None 则使用默认提示词
+    ///
+    /// # Returns
+    ///
+    /// 成功时返回 [`ChatStreamResponse`]。
+    fn chat_stream_with_system(
+        &self,
+        session_id: &str,
+        prompt: &str,
+        system_prompt: Option<&str>,
     ) -> impl Future<Output = Result<ChatStreamResponse>> + Send;
 
     /// 执行带图片的聊天（Vision API）。

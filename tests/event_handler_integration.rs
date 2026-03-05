@@ -47,13 +47,35 @@ impl AiServiceTrait for MockAiService {
         }
     }
 
+    async fn chat_with_system(
+        &self,
+        _session_id: &str,
+        prompt: &str,
+        _system_prompt: Option<&str>,
+    ) -> Result<String> {
+        let responses = self.responses.read().await;
+        if let Some(response) = responses.first() {
+            Ok(response.clone())
+        } else {
+            Ok(format!("Echo: {}", prompt))
+        }
+    }
+
     async fn reset_conversation(&self, _session_id: &str) {
         let mut called = self.reset_called.lock().await;
         *called = true;
     }
 
     async fn chat_stream(&self, _session_id: &str, _prompt: &str) -> Result<ChatStreamResponse> {
-        // 不支持流式测试
+        anyhow::bail!("Streaming not supported in mock")
+    }
+
+    async fn chat_stream_with_system(
+        &self,
+        _session_id: &str,
+        _prompt: &str,
+        _system_prompt: Option<&str>,
+    ) -> Result<ChatStreamResponse> {
         anyhow::bail!("Streaming not supported in mock")
     }
 

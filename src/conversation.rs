@@ -248,6 +248,43 @@ impl ConversationManager {
         messages
     }
 
+    /// 获取消息历史，使用自定义系统提示词覆盖默认值
+    ///
+    /// 与 [`get_messages`](ConversationManager::get_messages) 类似，
+    /// 但使用提供的系统提示词替代默认的系统提示词。
+    /// 适用于人设系统等需要动态改变 AI 行为的场景。
+    ///
+    /// # Arguments
+    ///
+    /// * `session_id` - 会话标识符
+    /// * `system_prompt` - 自定义系统提示词
+    ///
+    /// # Returns
+    ///
+    /// 消息列表，顺序为：自定义系统提示词 + 历史消息
+    pub fn get_messages_with_system(
+        &self,
+        session_id: &str,
+        system_prompt: &str,
+    ) -> Vec<ChatCompletionRequestMessage> {
+        let mut messages = Vec::new();
+
+        // 使用自定义系统提示词
+        messages.push(ChatCompletionRequestMessage::System(
+            ChatCompletionRequestSystemMessage {
+                content: system_prompt.to_string().into(),
+                name: None,
+            },
+        ));
+
+        // 添加历史消息
+        if let Some(history) = self.conversations.get(session_id) {
+            messages.extend(history.clone());
+        }
+
+        messages
+    }
+
     /// 重置（删除）指定会话的历史记录。
     ///
     /// # Arguments

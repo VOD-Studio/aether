@@ -14,6 +14,8 @@
 - 实现 `!persona set <id>` 命令 - 设置当前房间的人设（需要房间管理员权限）
 - 实现 `!persona off` 命令 - 关闭当前房间的人设（需要房间管理员权限）
 - 实现 `!persona info <id>` 命令 - 查看人设详情
+- 实现 `!persona create <id> <名称> <提示词>` 命令 - 创建自定义人设（需要房间管理员权限）
+- 实现 `!persona delete <id>` 命令 - 删除自定义人设（需要房间管理员权限）
 - 添加 4 个内置人设：
   - `sarcastic-dev` - 💻 毒舌程序员
   - `cyber-zen` - ☯️ 赛博禅师
@@ -22,6 +24,14 @@
 - 集成 SQLite 数据库 (rusqlite)
 - 创建数据库迁移系统
 - 添加 `personas`、`room_persona`、`chat_history` 数据库表
+
+### Changed
+
+- 设置人设时自动更新 Bot 显示名称为 "人设名 (人设)"
+- 关闭人设时恢复 Bot 默认名称 "Aether"
+- AI 对话自动使用房间设置的人设系统提示词
+- `CommandGateway` 使用 `RwLock<Parser>` 支持命令前缀运行时热更新
+- 命令前缀从 `!ai` 改为 `!`
 
 #### Phase 1 - Admin 模块
 - 实现 `!bot name <名称>` 命令 - 修改 Bot 显示名称（需要 Bot 所有者权限）
@@ -125,11 +135,7 @@
 - 修复 PersonaHandler 未注册到命令系统的问题
 - 修复数据库连接与 matrix-sdk 的 sqlite 依赖冲突
 
-### 变更
-
-- 命令前缀从 `!ai` 改为 `!`
-
-## [0.1.0] - 2026-02-XX
+## [0.1.0] - 2026-03-05
 
 ### 新增
 

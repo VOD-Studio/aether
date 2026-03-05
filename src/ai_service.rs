@@ -1,3 +1,4 @@
+use std::pin::Pin;
 use std::sync::Arc;
 use tokio::sync::{Mutex, RwLock};
 
@@ -5,7 +6,7 @@ use anyhow::Result;
 use async_openai::Client;
 use async_openai::config::OpenAIConfig;
 use async_openai::types::chat::CreateChatCompletionRequest;
-use futures_util::StreamExt;
+use futures_util::{Stream, StreamExt};
 
 use crate::config::Config;
 use crate::conversation::ConversationManager;
@@ -133,6 +134,67 @@ impl AiService {
             .unwrap_or_default();
 
         // 保存 AI 回复到历史
+        {
+            let mut conv = self.inner.conversation.write().await;
+            conv.add_assistant_message(session_id, &content);
+        }
+
+        Ok(content)
+    }
+
+/// 执行带自定义系统提示词的聊天。
+    ///
+    /// 与 [`chat`](AiService::chat) 类似，但允许覆盖默认的系统提示词。
+    /// 适用于人设系统等需要动态改变 AI 行为的场景。
+    ///
+    /// # Arguments
+    ///
+    /// * `session_id` - 会话标识符
+    /// * `prompt` - 用户输入的消息内容
+    /// * `system_prompt` - 自定义系统提示词，如果为 None 则使用默认提示词
+    ///
+    /// # Returns
+    ///
+    /// 成功时返回 AI 的完整回复文本。
+    pub async fn chat_with_system(
+        &self,
+        session_id: &str,
+        prompt: &str,
+        system_prompt: Option<&str>,
+    ) -> Result<String> {
+        // 添加用户消息到历史
+        {
+            let mut conv = self.inner.conversation.write().await;
+            conv.add_user_message(session_id, prompt);
+        }
+
+        // 获取消息历史，如果有自定义系统提示词则使用
+        let messages = {
+            let conv = self.inner.conversation.read().await;
+            if let Some(sp) = system_prompt {
+                conv.get_messages_with_system(session_id, sp)
+            } else {
+                conv.get_messages(session_id)
+            }
+        };
+
+        // 调用 API
+        let request = CreateChatCompletionRequest {
+            model: self.inner.model.clone(),
+            messages,
+            ..Default::default()
+        };
+
+        let response = self.inner.client.chat().create(request).await?;
+
+        // 提取回复内容
+        let content = response.choices[0]
+            .message
+            .content
+            .clone()
+            .unwrap_or_default();
+
+        // 添加助手回复到历史
         {
             let mut conv = self.inner.conversation.write().await;
             conv.add_assistant_message(session_id, &content);
@@ -400,11 +462,105 @@ impl AiService {
 
         Ok((state, Box::pin(wrapped_stream)))
     }
+
+    /// 带自定义系统提示词的流式聊天
+    pub async fn chat_stream_with_system(
+        &self,
+        session_id: &str,
+        prompt: &str,
+        system_prompt: Option<&str>,
+    ) -> Result<(
+        Arc<Mutex<StreamingState>>,
+        Pin<Box<dyn Stream<Item = Result<String>> + Send>>,
+    )> {
+        // 添加用户消息到历史
+        {
+            let mut conv = self.inner.conversation.write().await;
+            conv.add_user_message(session_id, prompt);
+        }
+
+        // 获取消息历史，如果有自定义系统提示词则使用
+        let messages = {
+            let conv = self.inner.conversation.read().await;
+            if let Some(sp) = system_prompt {
+                conv.get_messages_with_system(session_id, sp)
+            } else {
+                conv.get_messages(session_id)
+            }
+        };
+
+        // 创建流式请求
+        let request = CreateChatCompletionRequest {
+            model: self.inner.model.clone(),
+            messages,
+            stream: Some(true),
+            ..Default::default()
+        };
+
+        let stream = self.inner.client.chat().create_stream(request).await?;
+
+        // 创建共享状态
+        let state = Arc::new(Mutex::new(StreamingState::new()));
+        let state_clone = state.clone();
+        let conversation = self.inner.conversation.clone();
+        let session_id_owned = session_id.to_string();
+
+        // 包装 stream，在消费时更新状态
+        let wrapped_stream = stream.filter_map(move |chunk_result| {
+            let state = state_clone.clone();
+            let conversation = conversation.clone();
+            let session_id_owned = session_id_owned.clone();
+            async move {
+                match chunk_result {
+                    Ok(chunk) => {
+                        // 提取 delta 内容
+                        if let Some(delta) =
+                            chunk.choices.first().and_then(|c| c.delta.content.clone())
+                        {
+                            // 更新共享状态
+                            {
+                                let mut s = state.lock().await;
+                                s.append(&delta);
+                            }
+                            Some(Ok(delta))
+                        } else {
+                            // 检查是否是结束标记
+                            if chunk
+                                .choices
+                                .first()
+                                .is_some_and(|c| c.finish_reason.is_some())
+                            {
+                                // 保存完整回复到会话历史
+                                let s = state.lock().await;
+                                let content = s.content().to_string();
+                                drop(s); // 释放锁
+                                let mut conv = conversation.write().await;
+                                conv.add_assistant_message(&session_id_owned, &content);
+                            }
+                            None
+                        }
+                    }
+                    Err(e) => Some(Err(anyhow::anyhow!("流式响应错误: {}", e))),
+                }
+            }
+        });
+
+        Ok((state, Box::pin(wrapped_stream)))
+    }
 }
 
 impl AiServiceTrait for AiService {
     async fn chat(&self, session_id: &str, prompt: &str) -> Result<String> {
         self.chat(session_id, prompt).await
+    }
+
+    async fn chat_with_system(
+        &self,
+        session_id: &str,
+        prompt: &str,
+        system_prompt: Option<&str>,
+    ) -> Result<String> {
+        self.chat_with_system(session_id, prompt, system_prompt).await
     }
 
     async fn reset_conversation(&self, session_id: &str) {
@@ -432,6 +588,18 @@ impl AiServiceTrait for AiService {
     ) -> Result<ChatStreamResponse> {
         self.chat_with_image_stream(session_id, text, image_data_url)
             .await
+    }
+
+    async fn chat_stream_with_system(
+        &self,
+        session_id: &str,
+        prompt: &str,
+        system_prompt: Option<&str>,
+    ) -> Result<(
+        Arc<Mutex<StreamingState>>,
+        Pin<Box<dyn Stream<Item = Result<String>> + Send>>,
+    )> {
+        self.chat_stream_with_system(session_id, prompt, system_prompt).await
     }
 }
 

@@ -54,6 +54,7 @@ pub struct EventHandler<T: AiServiceTrait> {
     bot_user_id: OwnedUserId,
     command_prefix: String,
     command_gateway: CommandGateway,
+    persona_store: Option<PersonaStore>,
     streaming_enabled: bool,
     streaming_min_interval: Duration,
     streaming_min_chars: usize,
@@ -78,8 +79,8 @@ impl<T: AiServiceTrait> EventHandler<T> {
         command_gateway.register(Arc::new(BotLeaveHandler));
         command_gateway.register(Arc::new(BotPingHandler));
 
-        if let Some(store) = persona_store {
-            command_gateway.register(Arc::new(PersonaHandler::new(store)));
+        if let Some(ref store) = persona_store {
+            command_gateway.register(Arc::new(PersonaHandler::new(store.clone())));
         }
 
         Self {
@@ -88,6 +89,7 @@ impl<T: AiServiceTrait> EventHandler<T> {
             bot_user_id,
             command_prefix: config.command_prefix.clone(),
             command_gateway,
+            persona_store,
             streaming_enabled: config.streaming_enabled,
             streaming_min_interval: Duration::from_millis(config.streaming_min_interval_ms),
             streaming_min_chars: config.streaming_min_chars,
@@ -170,22 +172,40 @@ impl<T: AiServiceTrait> EventHandler<T> {
             room_id.to_string()
         };
 
+        // 获取房间的人设系统提示词
+        let system_prompt = if let Some(ref store) = self.persona_store {
+            match store.get_room_persona(room_id.as_str()) {
+                Ok(Some(persona)) => {
+                    debug!("使用人设 '{}' 的系统提示词", persona.name);
+                    Some(persona.system_prompt)
+                }
+                Ok(None) => None,
+                Err(e) => {
+                    warn!("获取房间人设失败: {}", e);
+                    None
+                }
+            }
+        } else {
+            None
+        };
+
+        // 根据消息类型处理
         match &original.content.msgtype {
             MessageType::Text(text_msg) => {
                 let clean_text = self.extract_message(&text_msg.body);
                 debug!("处理消息 [{}]: {}", session_id, clean_text);
 
                 if self.streaming_enabled {
-                    self.handle_streaming_response(&room, &session_id, &clean_text)
+                    self.handle_streaming_response(&room, &session_id, &clean_text, system_prompt.as_deref())
                         .await?;
                 } else {
-                    self.handle_normal_response(&room, &session_id, &clean_text)
+                    self.handle_normal_response(&room, &session_id, &clean_text, system_prompt.as_deref())
                         .await?;
                 }
             }
             MessageType::Image(image_msg) if self.vision_enabled => {
                 debug!("处理图片消息 [{}]", session_id);
-                match self.handle_image_message(&room, &session_id, image_msg).await {
+                match self.handle_image_message(&room, &session_id, image_msg, system_prompt.as_deref()).await {
                     Ok(_) => {}
                     Err(e) => {
                         warn!("图片处理失败: {}", e);
@@ -208,6 +228,7 @@ impl<T: AiServiceTrait> EventHandler<T> {
         room: &Room,
         session_id: &str,
         image_msg: &matrix_sdk::ruma::events::room::message::ImageMessageEventContent,
+        system_prompt: Option<&str>,
     ) -> Result<()> {
         let mxc_uri = match &image_msg.source {
             matrix_sdk::ruma::events::room::MediaSource::Plain(uri) => uri,
@@ -241,8 +262,9 @@ impl<T: AiServiceTrait> EventHandler<T> {
         room: &Room,
         session_id: &str,
         clean_text: &str,
+        system_prompt: Option<&str>,
     ) -> Result<()> {
-        match self.ai_service.chat(session_id, clean_text).await {
+        match self.ai_service.chat_with_system(session_id, clean_text, system_prompt).await {
             Ok(reply) => {
                 room.send(RoomMessageEventContent::text_plain(reply))
                     .await?;
@@ -265,9 +287,10 @@ impl<T: AiServiceTrait> EventHandler<T> {
         room: &Room,
         session_id: &str,
         clean_text: &str,
+        system_prompt: Option<&str>,
     ) -> Result<()> {
         // 开始流式聊天
-        let (state, mut stream) = match self.ai_service.chat_stream(session_id, clean_text).await {
+        let (state, mut stream) = match self.ai_service.chat_stream_with_system(session_id, clean_text, system_prompt).await {
             Ok(result) => result,
             Err(e) => {
                 warn!("流式 AI 调用初始化失败: {}", e);
@@ -404,6 +427,15 @@ mod tests {
             Ok("mock response".to_string())
         }
 
+        async fn chat_with_system(
+            &self,
+            _session_id: &str,
+            _prompt: &str,
+            _system_prompt: Option<&str>,
+        ) -> anyhow::Result<String> {
+            Ok("mock response".to_string())
+        }
+
         async fn reset_conversation(&self, _session_id: &str) {}
 
         async fn chat_stream(
@@ -414,6 +446,15 @@ mod tests {
             std::sync::Arc<tokio::sync::Mutex<crate::traits::StreamingState>>,
             std::pin::Pin<Box<dyn futures_util::Stream<Item = anyhow::Result<String>> + Send>>,
         )> {
+            unimplemented!()
+        }
+
+        async fn chat_stream_with_system(
+            &self,
+            _session_id: &str,
+            _prompt: &str,
+            _system_prompt: Option<&str>,
+        ) -> anyhow::Result<crate::traits::ChatStreamResponse> {
             unimplemented!()
         }
 
