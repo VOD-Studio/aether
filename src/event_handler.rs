@@ -6,9 +6,12 @@ use matrix_sdk::{
     Client, Room,
     ruma::{
         OwnedEventId, OwnedUserId,
-        events::room::{
-            member::{MembershipState, StrippedRoomMemberEvent},
-            message::{ReplacementMetadata, RoomMessageEventContent},
+        events::{
+            AnySyncTimelineEvent,
+            room::{
+                member::{MembershipState, StrippedRoomMemberEvent},
+                message::{Relation, ReplacementMetadata, RoomMessageEventContent},
+            },
         },
     },
 };
@@ -229,14 +232,24 @@ impl<T: AiServiceTrait> EventHandler<T> {
             room_id.to_string()
         };
 
-        debug!("处理消息 [{}]: {}", session_id, clean_text);
+        // 提取引用消息内容（如果有）
+        let reply_context = self.extract_reply_content(&room, original).await;
+
+        // 组装完整 prompt
+        let full_prompt = if let Some(ref reply) = reply_context {
+            debug!("处理消息 [{}] (引用: {}): {}", session_id, reply, clean_text);
+            format!("[引用消息]: {}\n\n{}", reply, clean_text)
+        } else {
+            debug!("处理消息 [{}]: {}", session_id, clean_text);
+            clean_text.clone()
+        };
 
         // 根据配置选择流式或普通响应
         if self.streaming_enabled {
-            self.handle_streaming_response(&room, &session_id, &clean_text)
+            self.handle_streaming_response(&room, &session_id, &full_prompt)
                 .await?;
         } else {
-            self.handle_normal_response(&room, &session_id, &clean_text)
+            self.handle_normal_response(&room, &session_id, &full_prompt)
                 .await?;
         }
 
@@ -390,6 +403,52 @@ impl<T: AiServiceTrait> EventHandler<T> {
         }
 
         Ok(())
+    }
+
+    /// 从消息中提取引用内容。
+    ///
+    /// 如果消息是回复消息（包含 `relates_to` 字段），则通过 Room API 获取
+    /// 被引用的事件，并提取其消息文本。
+    ///
+    /// # Arguments
+    ///
+    /// * `room` - 消息所在的房间
+    /// * `original` - 原始消息事件
+    ///
+    /// # Returns
+    ///
+    /// 成功时返回被引用消息的文本内容，失败或无引用时返回 `None`。
+    async fn extract_reply_content(
+        &self,
+        room: &Room,
+        original: &matrix_sdk::ruma::events::room::message::OriginalSyncRoomMessageEvent,
+    ) -> Option<String> {
+        // 检查是否是回复消息
+        let in_reply_to = original.content.relates_to.as_ref().and_then(|r| match r {
+            Relation::Reply { in_reply_to } => Some(&in_reply_to.event_id),
+            _ => None,
+        })?;
+
+        // 通过 Room API 获取被引用的事件
+        let event = room.load_or_fetch_event(in_reply_to, None).await.ok()?;
+
+        // 反序列化事件
+        let timeline_event = event.into_raw().deserialize().ok()?;
+
+        // 提取消息文本
+        match timeline_event {
+            AnySyncTimelineEvent::MessageLike(msg) => {
+                // 获取事件的原始内容（非删除状态）
+                msg.original_content()
+                    .and_then(|c| match c {
+                        matrix_sdk::ruma::events::AnyMessageLikeEventContent::RoomMessage(m) => {
+                            Some(m.msgtype.body().to_string())
+                        }
+                        _ => None,
+                    })
+            }
+            _ => None,
+        }
     }
 
     /// 从原始消息文本中提取纯净的消息内容。
