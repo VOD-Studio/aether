@@ -344,6 +344,8 @@ mod tests {
             matrix_username: "test".to_string(),
             matrix_password: "test".to_string(),
             matrix_device_id: None,
+            device_display_name: "Test Bot".to_string(),
+            store_path: "./store".to_string(),
             openai_api_key: "test".to_string(),
             openai_base_url: "https://api.openai.com/v1".to_string(),
             openai_model: "gpt-4o-mini".to_string(),
@@ -354,7 +356,6 @@ mod tests {
             streaming_min_interval_ms: 500,
             streaming_min_chars: 10,
             log_level: "info".to_string(),
-            device_display_name: "Test Bot".to_string(),
         };
         let bot_user_id = user_id!("@bot:matrix.org").to_owned();
         EventHandler::new(MockAiService, bot_user_id, &config)

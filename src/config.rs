@@ -8,6 +8,7 @@ pub struct Config {
     pub matrix_password: String,
     pub matrix_device_id: Option<String>,
     pub device_display_name: String,
+    pub store_path: String,
 
     // AI API 配置
     pub openai_api_key: String,
@@ -36,6 +37,7 @@ impl Default for Config {
             matrix_password: String::new(),
             matrix_device_id: None,
             device_display_name: "AI Bot".to_string(),
+            store_path: "./store".to_string(),
             openai_api_key: String::new(),
             openai_base_url: "https://api.openai.com/v1".to_string(),
             openai_model: "gpt-4o-mini".to_string(),
@@ -93,6 +95,7 @@ impl Config {
             matrix_device_id: std::env::var("MATRIX_DEVICE_ID").ok(),
             device_display_name: std::env::var("DEVICE_DISPLAY_NAME")
                 .unwrap_or_else(|_| "AI Bot".to_string()),
+            store_path: std::env::var("STORE_PATH").unwrap_or_else(|_| "./store".to_string()),
             openai_api_key: std::env::var("OPENAI_API_KEY").map_err(|_| {
                 anyhow::anyhow!(
                     "OPENAI_API_KEY 未设置。\n\

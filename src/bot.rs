@@ -20,7 +20,7 @@ impl Bot {
         // 创建 Matrix 客户端
         let client = Client::builder()
             .homeserver_url(&config.matrix_homeserver)
-            .sqlite_store("./store", None)
+            .sqlite_store(&config.store_path, None)
             .build()
             .await?;
 
