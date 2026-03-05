@@ -57,14 +57,11 @@ impl PersonaHandler {
     async fn handle_help(&self, ctx: &CommandContext<'_>) -> Result<()> {
         let items = vec![
             ("!persona list", "列出所有人设"),
-            ("!persona set <id>", "设置当前房间人设（需要管理员权限）"),
-            ("!persona off", "关闭当前房间人设（需要管理员权限）"),
+            ("!persona set <id>", "设置房间人设（管理员）"),
+            ("!persona off", "关闭房间人设（管理员）"),
             ("!persona info <id>", "查看人设详情"),
-            (
-                "!persona create <id> \'<名称>\' \'<提示词>\'",
-                "创建自定义人设（需要管理员权限）",
-            ),
-            ("!persona delete <id>", "删除自定义人设（需要管理员权限）"),
+            ("!persona create <id> <名称> <提示词>", "创建自定义人设（管理员）"),
+            ("!persona delete <id>", "删除自定义人设（管理员）"),
         ];
         let html = info_card("Persona 命令", &items);
         send_html(&ctx.room, &html).await
