@@ -15,15 +15,16 @@ use crate::event_handler::EventHandler;
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    // 加载配置（需要先加载以获取日志级别）
+    let config = Config::from_env()?;
+
     // 初始化日志
     tracing_subscriber::fmt()
         .with_env_filter(
-            tracing_subscriber::EnvFilter::try_new("info").expect("Invalid env filter"),
+            tracing_subscriber::EnvFilter::try_new(&config.log_level).expect("Invalid log level"),
         )
         .init();
 
-    // 加载配置
-    let config = Config::from_env()?;
     info!("配置加载完成");
 
     // 创建 Matrix 客户端
@@ -53,7 +54,9 @@ async fn main() -> Result<()> {
         login_builder.await?;
     }
 
-    let user_id = client.user_id().unwrap();
+    let user_id = client
+        .user_id()
+        .ok_or_else(|| anyhow::anyhow!("登录后无法获取用户ID"))?;
     info!("登录成功: {}", user_id);
 
     // 创建 AI 服务
@@ -87,20 +90,40 @@ async fn main() -> Result<()> {
 
     info!("开始同步...");
 
-    // 开始同步（使用回调处理错误，实现自动重连）
-    client
-        .sync_with_result_callback(SyncSettings::new(), |result| async move {
-            match result {
-                Ok(_) => {
-                    tracing::trace!("同步成功");
+    // 创建关闭信号通道
+    let (shutdown_tx, shutdown_rx) = tokio::sync::broadcast::channel::<()>(1);
+
+    // 启动信号监听任务
+    tokio::spawn({
+        let shutdown_tx = shutdown_tx.clone();
+        async move {
+            match tokio::signal::ctrl_c().await {
+                Ok(()) => {
+                    info!("收到关闭信号，正在停止...");
+                    let _ = shutdown_tx.send(());
                 }
                 Err(e) => {
-                    tracing::warn!("同步失败，将自动重试: {}", e);
+                    tracing::error!("信号监听错误: {}", e);
                 }
             }
-            Ok(LoopCtrl::Continue)
+        }
+    });
+
+    // 开始同步（使用回调处理错误，实现自动重连和优雅关闭）
+    client
+        .sync_with_result_callback(SyncSettings::new(), move |_result| {
+            let mut shutdown_rx = shutdown_rx.resubscribe();
+            async move {
+                // 检查关闭信号
+                if shutdown_rx.try_recv().is_ok() {
+                    info!("正在停止同步...");
+                    return Ok(LoopCtrl::Break);
+                }
+                Ok(LoopCtrl::Continue)
+            }
         })
         .await?;
 
+    info!("机器人已停止");
     Ok(())
 }

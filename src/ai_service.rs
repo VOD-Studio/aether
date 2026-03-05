@@ -3,9 +3,9 @@ use std::sync::Arc;
 use tokio::sync::{Mutex, RwLock};
 
 use anyhow::Result;
+use async_openai::Client;
 use async_openai::config::OpenAIConfig;
 use async_openai::types::chat::CreateChatCompletionRequest;
-use async_openai::Client;
 use futures_util::{Stream, StreamExt};
 
 use crate::config::Config;

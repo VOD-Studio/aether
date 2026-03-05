@@ -23,6 +23,9 @@ pub struct Config {
     pub streaming_enabled: bool,
     pub streaming_min_interval_ms: u64,
     pub streaming_min_chars: usize,
+
+    // 日志配置
+    pub log_level: String,
 }
 
 impl Config {
@@ -99,6 +102,8 @@ impl Config {
                 .ok()
                 .and_then(|s| s.parse().ok())
                 .unwrap_or(10),
+            // 日志配置
+            log_level: std::env::var("LOG_LEVEL").unwrap_or_else(|_| "info".to_string()),
         })
     }
 }
