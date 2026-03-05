@@ -21,3 +21,7 @@ tokio-test = "0.4"
 wiremock = "0.6"
 mockall = "0.13"
 tempfile = "3"
+
+# Windows: 使用 bundled SQLite
+[target.'cfg(windows)'.dependencies]
+rusqlite = { version = "0.37", features = ["bundled"] }

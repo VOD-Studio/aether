@@ -27,6 +27,9 @@ pub struct Config {
 
     // 日志配置
     pub log_level: String,
+
+    // 代理配置
+    pub proxy: Option<String>,
 }
 
 impl Default for Config {
@@ -48,6 +51,7 @@ impl Default for Config {
             streaming_min_interval_ms: 1000,
             streaming_min_chars: 50,
             log_level: "info".to_string(),
+            proxy: None,
         }
     }
 }
@@ -129,6 +133,8 @@ impl Config {
                 .unwrap_or(50),
             // 日志配置
             log_level: std::env::var("LOG_LEVEL").unwrap_or_else(|_| "info".to_string()),
+            // 代理配置
+            proxy: std::env::var("PROXY").ok(),
         })
     }
 }

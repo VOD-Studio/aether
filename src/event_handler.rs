@@ -18,11 +18,7 @@ use crate::config::Config;
 use crate::traits::AiServiceTrait;
 
 /// 处理房间邀请（独立函数，不依赖 EventHandler 实例）
-pub async fn handle_invite(
-    ev: StrippedRoomMemberEvent,
-    client: Client,
-    room: Room,
-) -> Result<()> {
+pub async fn handle_invite(ev: StrippedRoomMemberEvent, client: Client, room: Room) -> Result<()> {
     if ev.content.membership != MembershipState::Invite {
         return Ok(());
     }
@@ -356,6 +352,7 @@ mod tests {
             streaming_min_interval_ms: 500,
             streaming_min_chars: 10,
             log_level: "info".to_string(),
+            proxy: None,
         };
         let bot_user_id = user_id!("@bot:matrix.org").to_owned();
         EventHandler::new(MockAiService, bot_user_id, &config)

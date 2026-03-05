@@ -18,11 +18,17 @@ impl Bot {
     /// 从配置创建 Bot（包含客户端构建和登录）
     pub async fn new(config: Config) -> Result<Self> {
         // 创建 Matrix 客户端
-        let client = Client::builder()
+        let mut client_builder = Client::builder()
             .homeserver_url(&config.matrix_homeserver)
-            .sqlite_store(&config.store_path, None)
-            .build()
-            .await?;
+            .sqlite_store(&config.store_path, None);
+
+        // 配置代理
+        if let Some(proxy_url) = &config.proxy {
+            info!("使用代理: {}", proxy_url);
+            client_builder = client_builder.proxy(proxy_url);
+        }
+
+        let client = client_builder.build().await?;
 
         // 检查是否已有有效会话
         if client.session_meta().is_some() {
