@@ -14,22 +14,26 @@ use matrix_sdk::{
 
 /// 从 Matrix 服务器下载图片并转换为 base64 data URL。
 ///
+/// 下载后会自动缩放图片（如果超过最大尺寸），保持宽高比。
+///
 /// # Arguments
 ///
 /// * `client` - Matrix 客户端实例
 /// * `mxc_uri` - Matrix 内容 URI (mxc://...)
 /// * `expected_media_type` - 预期的媒体类型（可选，用于验证）
+/// * `max_size` - 图片最大边长（像素），超过此尺寸会自动缩放
 ///
 /// # Returns
 ///
-/// 成功时返回 base64 编码的 data URL，格式为 `data:{media_type};base64,{data}`
+/// 成功时返回 base64 编码的 data URL，格式为 `data:image/png;base64,{data}`
+/// 缩放后的图片统一输出为 PNG 格式。
 ///
 /// # Errors
 ///
 /// 当以下情况发生时返回错误：
 /// - MXC URI 无效
 /// - 图片下载失败
-/// - 无法确定媒体类型
+/// - 图片解析或缩放失败
 ///
 /// # Example
 ///
@@ -40,12 +44,14 @@ use matrix_sdk::{
 ///     &client,
 ///     "mxc://matrix.org/abc123",
 ///     Some("image/png"),
+///     1024,  // 最大 1024 像素
 /// ).await?;
 /// ```
 pub async fn download_image_as_base64(
     client: &Client,
     mxc_uri: &MxcUri,
-    expected_media_type: Option<&str>,
+    _expected_media_type: Option<&str>,
+    max_size: u32,
 ) -> Result<String> {
     // 验证 MXC URI
     if !mxc_uri.is_valid() {
@@ -63,11 +69,11 @@ pub async fn download_image_as_base64(
         .await
         .context("从 Matrix 服务器下载图片失败")?;
 
-    // 确定媒体类型
-    let media_type = expected_media_type.unwrap_or("image/png");
+    // 缩放图片（如果需要）
+    let processed_media = resize_image_if_needed(&media, max_size)?;
 
-    // 编码为 data URL
-    Ok(encode_as_data_url(&media, media_type))
+    // 编码为 data URL（缩放后统一为 PNG 格式）
+    Ok(encode_as_data_url(&processed_media, "image/png"))
 }
 
 /// 缩放图片（如果超过最大尺寸）。

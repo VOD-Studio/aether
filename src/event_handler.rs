@@ -124,7 +124,6 @@ pub struct EventHandler<T: AiServiceTrait> {
     streaming_min_chars: usize,
     /// 是否启用图片理解功能
     vision_enabled: bool,
-    #[allow(dead_code)]
     /// 图片最大尺寸（像素）
     vision_max_image_size: u32,
 }
@@ -557,7 +556,7 @@ impl<T: AiServiceTrait> EventHandler<T> {
             .unwrap_or("image/png");
 
         let image_data_url =
-            match download_image_as_base64(&self.client, mxc_uri, Some(media_type)).await {
+            match download_image_as_base64(&self.client, mxc_uri, Some(media_type), self.vision_max_image_size).await {
                 Ok(data) => data,
                 Err(e) => {
                     warn!("下载图片失败: {}", e);

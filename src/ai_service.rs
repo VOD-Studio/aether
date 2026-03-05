@@ -53,6 +53,8 @@ struct AiServiceInner {
     client: Client<OpenAIConfig>,
     /// 使用的模型名称
     model: String,
+    /// 图片理解使用的模型名称
+    vision_model: String,
     /// 会话管理器（使用 RwLock 支持并发读写）
     conversation: Arc<RwLock<ConversationManager>>,
 }
@@ -120,6 +122,10 @@ impl AiService {
             inner: Arc::new(AiServiceInner {
                 client: Client::with_config(openai_config),
                 model: config.openai_model.clone(),
+                vision_model: config
+                    .vision_model
+                    .clone()
+                    .unwrap_or_else(|| config.openai_model.clone()),
                 conversation: Arc::new(RwLock::new(ConversationManager::new(
                     config.system_prompt.clone(),
                     config.max_history,
@@ -327,7 +333,7 @@ impl AiService {
 
         // 构建并发送 API 请求
         let request = CreateChatCompletionRequest {
-            model: self.inner.model.clone(),
+            model: self.inner.vision_model.clone(),
             messages,
             ..Default::default()
         };
@@ -390,7 +396,7 @@ impl AiService {
 
         // 创建流式请求
         let request = CreateChatCompletionRequest {
-            model: self.inner.model.clone(),
+            model: self.inner.vision_model.clone(),
             messages,
             stream: Some(true),
             ..Default::default()
