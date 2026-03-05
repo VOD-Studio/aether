@@ -5,7 +5,7 @@ use async_trait::async_trait;
 use matrix_sdk::ruma::events::room::message::RoomMessageEventContent;
 
 use crate::command::{CommandContext, CommandHandler, Permission};
-use crate::ui::{info_card, success, warning};
+use crate::ui::{info_card, success, warning, error};
 
 /// Bot 信息命令处理器
 pub struct BotInfoHandler;
@@ -21,7 +21,7 @@ impl CommandHandler for BotInfoHandler {
     }
 
     fn usage(&self) -> &str {
-        "bot info - 查看 Bot 信息"
+        "bot <info|name|ping>"
     }
 
     fn permission(&self) -> Permission {
@@ -33,6 +33,7 @@ impl CommandHandler for BotInfoHandler {
 
         match sub {
             Some("info") => self.handle_info(ctx).await,
+            Some("name") => self.handle_name(ctx).await,
             Some("ping") => self.handle_ping(ctx).await,
             _ => self.handle_help(ctx).await,
         }
@@ -43,6 +44,7 @@ impl BotInfoHandler {
     async fn handle_help(&self, ctx: &CommandContext<'_>) -> Result<()> {
         let items = vec![
             ("!bot info", "查看 Bot 基本信息"),
+            ("!bot name <名称>", "修改 Bot 显示名称（需要 Bot 所有者权限）"),
             ("!bot ping", "测试响应延迟"),
             ("!bot leave", "离开当前房间（需要管理员权限）"),
         ];
@@ -75,6 +77,34 @@ impl BotInfoHandler {
 
         let html = info_card("Bot 信息", &items);
         send_html(&ctx.room, &html).await
+    }
+
+    async fn handle_name(&self, ctx: &CommandContext<'_>) -> Result<()> {
+        // 检查权限 - 需要 BotOwner
+        if !Permission::BotOwner.check(&ctx.room, &ctx.sender, ctx.bot_owners).await {
+            let html = error("权限不足: 需要 Bot 所有者权限");
+            return send_html(&ctx.room, &html).await;
+        }
+
+        // 获取新名称参数（子命令后的参数）
+        let new_name: String = ctx.sub_args().join(" ");
+        if new_name.is_empty() {
+            let html = error("请提供新名称: !bot name <名称>");
+            return send_html(&ctx.room, &html).await;
+        }
+
+        // 调用 Matrix API 设置显示名称
+        let account = ctx.client.account();
+        match account.set_display_name(Some(&new_name)).await {
+            Ok(()) => {
+                let html = success(&format!("显示名称已修改为: {}", new_name));
+                send_html(&ctx.room, &html).await
+            }
+            Err(e) => {
+                let html = error(&format!("修改显示名称失败: {}", e));
+                send_html(&ctx.room, &html).await
+            }
+        }
     }
 
     async fn handle_ping(&self, ctx: &CommandContext<'_>) -> Result<()> {

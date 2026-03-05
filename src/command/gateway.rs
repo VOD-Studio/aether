@@ -107,6 +107,7 @@ impl CommandGateway {
             parsed.args,
             parsed.raw_msg,
             event_id,
+            &self.bot_owners,
         );
 
         handler.execute(&ctx).await

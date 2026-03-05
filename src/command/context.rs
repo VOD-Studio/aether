@@ -19,6 +19,8 @@ pub struct CommandContext<'a> {
     pub raw_msg: &'a str,
     /// 事件 ID
     pub event_id: OwnedEventId,
+    /// Bot 所有者列表
+    pub bot_owners: &'a [String],
 }
 
 impl<'a> CommandContext<'a> {
@@ -31,6 +33,7 @@ impl<'a> CommandContext<'a> {
         args: Vec<&'a str>,
         raw_msg: &'a str,
         event_id: OwnedEventId,
+        bot_owners: &'a [String],
     ) -> Self {
         Self {
             client,
@@ -40,6 +43,7 @@ impl<'a> CommandContext<'a> {
             args,
             raw_msg,
             event_id,
+            bot_owners,
         }
     }
 
