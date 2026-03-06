@@ -50,11 +50,12 @@
 use std::collections::HashMap;
 
 use async_openai::types::chat::{
-    ChatCompletionRequestAssistantMessage, ChatCompletionRequestAssistantMessageContent,
-    ChatCompletionRequestMessage, ChatCompletionRequestMessageContentPartImage,
-    ChatCompletionRequestMessageContentPartText, ChatCompletionRequestSystemMessage,
-    ChatCompletionRequestUserMessage, ChatCompletionRequestUserMessageContent, ImageDetail,
-    ImageUrl,
+    ChatCompletionMessageToolCalls, ChatCompletionRequestAssistantMessage,
+    ChatCompletionRequestAssistantMessageContent, ChatCompletionRequestMessage,
+    ChatCompletionRequestMessageContentPartImage, ChatCompletionRequestMessageContentPartText,
+    ChatCompletionRequestSystemMessage, ChatCompletionRequestToolMessage,
+    ChatCompletionRequestToolMessageContent, ChatCompletionRequestUserMessage,
+    ChatCompletionRequestUserMessageContent, FunctionCall, ImageDetail, ImageUrl,
 };
 
 /// 会话历史管理器。
@@ -339,6 +340,102 @@ impl ConversationManager {
     pub fn reset(&mut self, session_id: &str) {
         self.conversations.remove(session_id);
     }
+
+    /// 添加工具调用消息（assistant 调用工具）
+    ///
+    /// 当 AI 决定调用工具时，需要记录这个工具调用消息。
+    /// 这个消息会包含工具调用的 ID、名称和参数。
+    ///
+    /// # Arguments
+    ///
+    /// * `session_id` - 会话标识符
+    /// * `tool_call_id` - 工具调用 ID
+    /// * `tool_name` - 工具名称
+    /// * `arguments` - 工具参数（JSON 格式）
+    pub fn add_tool_call_message(
+        &mut self,
+        session_id: &str,
+        tool_call_id: String,
+        tool_name: String,
+        arguments: serde_json::Value,
+    ) {
+        let history = self
+            .conversations
+            .entry(session_id.to_string())
+            .or_default();
+
+        let tool_call = ChatCompletionMessageToolCalls::Function(
+            async_openai::types::chat::ChatCompletionMessageToolCall {
+                id: tool_call_id,
+                function: FunctionCall {
+                    name: tool_name,
+                    arguments: serde_json::to_string(&arguments).unwrap_or_default(),
+                },
+            },
+        );
+
+        // 检查最后一条消息是否是 assistant 消息
+        // 如果是，追加 tool_call；否则创建新的 assistant 消息
+        if let Some(last_msg) = history.last_mut() {
+            if let ChatCompletionRequestMessage::Assistant(msg) = last_msg {
+                if let Some(tool_calls) = &mut msg.tool_calls {
+                    tool_calls.push(tool_call);
+                } else {
+                    msg.tool_calls = Some(vec![tool_call]);
+                }
+                return;
+            }
+        }
+
+        // 创建新的 assistant 消息
+        let msg = ChatCompletionRequestAssistantMessage {
+            content: None,
+            tool_calls: Some(vec![tool_call]),
+            ..Default::default()
+        };
+        history.push(ChatCompletionRequestMessage::Assistant(msg));
+
+        // 历史长度限制
+        if history.len() > self.max_history * 2 {
+            *history = history.split_off(history.len() - self.max_history * 2);
+        }
+    }
+
+    /// 添加工具结果消息（tool 返回结果）
+    ///
+    /// 工具执行完成后，需要将结果添加到会话历史。
+    /// 这个消息会包含工具调用的 ID 和执行结果。
+    ///
+    /// # Arguments
+    ///
+    /// * `session_id` - 会话标识符
+    /// * `tool_call_id` - 工具调用 ID（对应 add_tool_call_message 中的 ID）
+    /// * `result` - 工具执行结果
+    pub fn add_tool_result_message(
+        &mut self,
+        session_id: &str,
+        tool_call_id: String,
+        result: serde_json::Value,
+    ) {
+        let history = self
+            .conversations
+            .entry(session_id.to_string())
+            .or_default();
+
+        let content = serde_json::to_string(&result).unwrap_or_default();
+
+        let msg = ChatCompletionRequestToolMessage {
+            content: ChatCompletionRequestToolMessageContent::Text(content),
+            tool_call_id,
+        };
+
+        history.push(ChatCompletionRequestMessage::Tool(msg));
+
+        // 历史长度限制
+        if history.len() > self.max_history * 2 {
+            *history = history.split_off(history.len() - self.max_history * 2);
+        }
+    }
 }
 
 #[cfg(test)]
@@ -464,5 +561,99 @@ mod tests {
 
         assert_eq!(s1_messages.len(), 2);
         assert_eq!(s2_messages.len(), 1);
+    }
+
+    #[test]
+    fn test_add_tool_call_message() {
+        let mut manager = ConversationManager::new(None, 10);
+        manager.add_user_message("session-1", "Get weather for Beijing");
+
+        // 添加工具调用消息
+        let args = serde_json::json!({"city": "Beijing"});
+        manager.add_tool_call_message(
+            "session-1",
+            "call_123".to_string(),
+            "weather_fetch".to_string(),
+            args,
+        );
+
+        let messages = manager.get_messages("session-1");
+        assert_eq!(messages.len(), 2); // user + assistant (with tool_call)
+
+        // 检查最后一条消息是 assistant 消息且包含 tool_calls
+        match &messages[1] {
+            ChatCompletionRequestMessage::Assistant(msg) => {
+                assert!(msg.tool_calls.is_some());
+                let tool_calls = msg.tool_calls.as_ref().unwrap();
+                assert_eq!(tool_calls.len(), 1);
+            }
+            _ => panic!("Expected assistant message with tool_calls"),
+        }
+    }
+
+    #[test]
+    fn test_add_tool_result_message() {
+        let mut manager = ConversationManager::new(None, 10);
+        manager.add_user_message("session-1", "Get weather");
+
+        // 添加工具调用
+        let args = serde_json::json!({"city": "Beijing"});
+        manager.add_tool_call_message(
+            "session-1",
+            "call_123".to_string(),
+            "weather_fetch".to_string(),
+            args,
+        );
+
+        // 添加工具结果
+        let result = serde_json::json!({"temperature": 20, "condition": "sunny"});
+        manager.add_tool_result_message("session-1", "call_123".to_string(), result);
+
+        let messages = manager.get_messages("session-1");
+        assert_eq!(messages.len(), 3); // user + assistant (tool_call) + tool (result)
+
+        // 检查最后一条消息是 tool 消息
+        match &messages[2] {
+            ChatCompletionRequestMessage::Tool(msg) => {
+                assert_eq!(msg.tool_call_id, "call_123");
+            }
+            _ => panic!("Expected tool message"),
+        }
+    }
+
+    #[test]
+    fn test_multiple_tool_calls_in_one_message() {
+        let mut manager = ConversationManager::new(None, 10);
+        manager.add_user_message("session-1", "Get weather for multiple cities");
+
+        // 添加第一个工具调用
+        let args1 = serde_json::json!({"city": "Beijing"});
+        manager.add_tool_call_message(
+            "session-1",
+            "call_1".to_string(),
+            "weather_fetch".to_string(),
+            args1,
+        );
+
+        // 添加第二个工具调用（应该追加到同一条 assistant 消息）
+        let args2 = serde_json::json!({"city": "Shanghai"});
+        manager.add_tool_call_message(
+            "session-1",
+            "call_2".to_string(),
+            "weather_fetch".to_string(),
+            args2,
+        );
+
+        let messages = manager.get_messages("session-1");
+        assert_eq!(messages.len(), 2); // user + assistant (with 2 tool_calls)
+
+        // 检查 assistant 消息包含两个 tool_calls
+        match &messages[1] {
+            ChatCompletionRequestMessage::Assistant(msg) => {
+                let tool_calls = msg.tool_calls.as_ref().unwrap();
+                assert_eq!(tool_calls.len(), 2);
+            }
+            _ => panic!("Expected assistant message with 2 tool_calls"),
+        }
     }
 }
