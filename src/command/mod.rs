@@ -27,17 +27,33 @@
 //!
 //! ## 使用示例
 //!
-//! ```ignore
-//! use aether_matrix::command::{CommandGateway, CommandContext, CommandHandler};
+//! ```no_run
+//! use std::sync::Arc;
+//! use aether_matrix::command::{CommandGateway, CommandHandler, CommandContext, Permission};
+//! use async_trait::async_trait;
 //!
-//! // 注册命令处理器
-//! let mut gateway = CommandGateway::new(config.clone());
-//! gateway.register("help", HelpHandler);
+//! // 定义一个简单的命令处理器
+//! struct HelpHandler;
 //!
-//! // 处理命令
-//! if let Some(parsed) = parser.parse(msg) {
-//!     gateway.handle(&context, parsed.cmd, parsed.args).await;
+//! #[async_trait]
+//! impl CommandHandler for HelpHandler {
+//!     fn name(&self) -> &str {
+//!         "help"
+//!     }
+//!
+//!     fn description(&self) -> &str {
+//!         "显示帮助信息"
+//!     }
+//!
+//!     async fn execute(&self, ctx: &CommandContext<'_>) -> anyhow::Result<()> {
+//!         // 命令执行逻辑
+//!         Ok(())
+//!     }
 //! }
+//!
+//! // 创建命令网关并注册处理器
+//! let mut gateway = CommandGateway::new("!".to_string(), vec![]);
+//! gateway.register(Arc::new(HelpHandler));
 //! ```
 
 mod context;
@@ -48,5 +64,9 @@ mod registry;
 
 pub use context::CommandContext;
 pub use gateway::CommandGateway;
+#[allow(unused_imports)]
+pub use parser::Parser;
+#[allow(unused_imports)]
+pub use parser::ParsedCommand;
 pub use permission::Permission;
 pub use registry::CommandHandler;
