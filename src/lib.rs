@@ -26,6 +26,7 @@ pub mod command;
 pub mod config;
 pub mod conversation;
 pub mod event_handler;
+pub mod mcp;
 pub mod media;
 pub mod modules;
 pub mod store;

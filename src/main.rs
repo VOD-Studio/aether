@@ -18,6 +18,7 @@ mod command;
 mod config;
 mod conversation;
 mod event_handler;
+mod mcp;
 mod media;
 mod modules;
 mod store;
