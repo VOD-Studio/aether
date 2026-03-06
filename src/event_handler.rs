@@ -34,6 +34,9 @@ use crate::command::CommandGateway;
 use crate::config::Config;
 use crate::media::download_image_as_base64;
 use crate::modules::admin::{BotInfoHandler, BotLeaveHandler, BotPingHandler};
+use crate::modules::muyu::{
+    BagHandler, MeritHandler, MuyuHandler, MuyuStore, RankHandler, TitleHandler,
+};
 use crate::modules::persona::PersonaHandler;
 use crate::store::PersonaStore;
 use crate::traits::AiServiceTrait;
@@ -140,6 +143,7 @@ impl<T: AiServiceTrait> EventHandler<T> {
     /// - [`BotLeaveHandler`]\: 机器人离开房间
     /// - [`BotPingHandler`]\: Ping 测试
     /// - [`PersonaHandler`]\: 人设管理（如果数据库可用）
+    /// - [`MuyuHandler`]\: 赛博木鱼（如果数据库可用）
     ///
     /// # Arguments
     ///
@@ -148,6 +152,7 @@ impl<T: AiServiceTrait> EventHandler<T> {
     /// * `client` - Matrix 客户端实例
     /// * `config` - 机器人配置
     /// * `persona_store` - 人设存储（可选）
+    /// * `muyu_store` - 木鱼存储（可选）
     ///
     /// # Returns
     ///
@@ -158,6 +163,7 @@ impl<T: AiServiceTrait> EventHandler<T> {
         client: Client,
         config: &Config,
         persona_store: Option<PersonaStore>,
+        muyu_store: Option<MuyuStore>,
     ) -> Self {
         let mut command_gateway =
             CommandGateway::new(config.command_prefix.clone(), config.bot_owners.clone());
@@ -168,6 +174,14 @@ impl<T: AiServiceTrait> EventHandler<T> {
 
         if let Some(ref store) = persona_store {
             command_gateway.register(Arc::new(PersonaHandler::new(store.clone())));
+        }
+
+        if let Some(ref store) = muyu_store {
+            command_gateway.register(Arc::new(MuyuHandler::new(store.clone())));
+            command_gateway.register(Arc::new(MeritHandler::new(store.clone())));
+            command_gateway.register(Arc::new(RankHandler::new(store.clone())));
+            command_gateway.register(Arc::new(TitleHandler::new(store.clone())));
+            command_gateway.register(Arc::new(BagHandler::new(store.clone())));
         }
 
         Self {
@@ -319,16 +333,29 @@ impl<T: AiServiceTrait> EventHandler<T> {
                 debug!("处理消息 [{}]: {}", session_id, clean_text);
 
                 if self.streaming_enabled {
-                    self.handle_streaming_response(&room, &session_id, &clean_text, system_prompt.as_deref())
-                        .await?;
+                    self.handle_streaming_response(
+                        &room,
+                        &session_id,
+                        &clean_text,
+                        system_prompt.as_deref(),
+                    )
+                    .await?;
                 } else {
-                    self.handle_normal_response(&room, &session_id, &clean_text, system_prompt.as_deref())
-                        .await?;
+                    self.handle_normal_response(
+                        &room,
+                        &session_id,
+                        &clean_text,
+                        system_prompt.as_deref(),
+                    )
+                    .await?;
                 }
             }
-MessageType::Image(image_msg) if self.vision_enabled => {
+            MessageType::Image(image_msg) if self.vision_enabled => {
                 debug!("处理图片消息 [{}]", session_id);
-                match self.handle_image_message(&room, &session_id, image_msg, system_prompt.as_deref()).await {
+                match self
+                    .handle_image_message(&room, &session_id, image_msg, system_prompt.as_deref())
+                    .await
+                {
                     Ok(_) => {}
                     Err(e) => {
                         warn!("图片处理失败: {}", e);
@@ -383,7 +410,11 @@ MessageType::Image(image_msg) if self.vision_enabled => {
         clean_text: &str,
         system_prompt: Option<&str>,
     ) -> Result<()> {
-        match self.ai_service.chat_with_system(session_id, clean_text, system_prompt).await {
+        match self
+            .ai_service
+            .chat_with_system(session_id, clean_text, system_prompt)
+            .await
+        {
             Ok(reply) => {
                 room.send(RoomMessageEventContent::text_plain(reply))
                     .await?;
@@ -434,7 +465,11 @@ MessageType::Image(image_msg) if self.vision_enabled => {
         system_prompt: Option<&str>,
     ) -> Result<()> {
         // 开始流式聊天
-        let (state, mut stream) = match self.ai_service.chat_stream_with_system(session_id, clean_text, system_prompt).await {
+        let (state, mut stream) = match self
+            .ai_service
+            .chat_stream_with_system(session_id, clean_text, system_prompt)
+            .await
+        {
             Ok(result) => result,
             Err(e) => {
                 warn!("流式 AI 调用初始化失败: {}", e);
@@ -677,7 +712,7 @@ mod tests {
                 .await
                 .unwrap()
         });
-        EventHandler::new(MockAiService, bot_user_id, client, &config, None)
+        EventHandler::new(MockAiService, bot_user_id, client, &config, None, None)
     }
 
     #[test]
