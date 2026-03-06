@@ -11,10 +11,10 @@
 //!
 //! ## 模块结构
 //!
-//! - [`tool_registry`]: 工具注册表，统一管理所有工具
-//! - [`config`]: MCP 配置管理
-//! - [`builtin`]: 内置工具实现
-//! - [`transport`]: MCP 传输层（Stdio/HTTP/SSE）
+//! - [`tool_registry`][]: 工具注册表，统一管理所有工具
+//! - [`config`][]: MCP 配置管理
+//! - [`builtin`][]: 内置工具实现
+//! - [`transport`][]: MCP 传输层（Stdio/HTTP/SSE）
 
 pub mod builtin;
 pub mod config;

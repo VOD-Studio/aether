@@ -376,15 +376,15 @@ impl ConversationManager {
 
         // 检查最后一条消息是否是 assistant 消息
         // 如果是，追加 tool_call；否则创建新的 assistant 消息
-        if let Some(last_msg) = history.last_mut() {
-            if let ChatCompletionRequestMessage::Assistant(msg) = last_msg {
-                if let Some(tool_calls) = &mut msg.tool_calls {
-                    tool_calls.push(tool_call);
-                } else {
-                    msg.tool_calls = Some(vec![tool_call]);
-                }
-                return;
+        if let Some(last_msg) = history.last_mut()
+            && let ChatCompletionRequestMessage::Assistant(msg) = last_msg
+        {
+            if let Some(tool_calls) = &mut msg.tool_calls {
+                tool_calls.push(tool_call);
+            } else {
+                msg.tool_calls = Some(vec![tool_call]);
             }
+            return;
         }
 
         // 创建新的 assistant 消息

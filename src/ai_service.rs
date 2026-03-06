@@ -180,6 +180,169 @@ impl AiService {
         Ok(content)
     }
 
+    /// 执行带工具调用的聊天（支持 MCP）。
+    ///
+    /// 如果 MCP 启用且有可用工具，AI 可以自动调用工具来完成任务。
+    /// 工具调用会自动循环，直到 AI 返回最终文本回复。
+    ///
+    /// # Arguments
+    ///
+    /// * `session_id` - 会话标识符
+    /// * `prompt` - 用户输入的消息内容
+    /// * `system_prompt` - 自定义系统提示词（可选）
+    ///
+    /// # Returns
+    ///
+    /// 成功时返回 AI 的最终回复文本。
+    pub async fn chat_with_tools(
+        &self,
+        session_id: &str,
+        prompt: &str,
+        system_prompt: Option<&str>,
+    ) -> Result<String> {
+        // 添加用户消息（如果有）
+        if !prompt.is_empty() {
+            let mut conv = self.inner.conversation.write().await;
+            conv.add_user_message(session_id, prompt);
+        }
+
+        // 获取所有可用工具
+        let tools = if let Some(ref mcp_registry) = self.inner.mcp_registry {
+            let registry = mcp_registry.read().await;
+            if registry.is_empty() {
+                None
+            } else {
+                Some(registry.to_openai_tools())
+            }
+        } else {
+            None
+        };
+
+        // 如果没有工具，使用普通聊天
+        if tools.is_none() {
+            return self.chat_with_system(session_id, prompt, system_prompt).await;
+        }
+
+        let tools = tools.unwrap();
+
+        // 获取消息历史
+        let messages = {
+            let conv = self.inner.conversation.read().await;
+            match system_prompt {
+                Some(sp) => conv.get_messages_with_system(session_id, sp),
+                None => conv.get_messages(session_id),
+            }
+        };
+
+        // 构建带工具的请求
+        let request = CreateChatCompletionRequest {
+            model: self.inner.model.clone(),
+            messages,
+            tools: Some(tools),
+            tool_choice: Some(async_openai::types::chat::ChatCompletionToolChoiceOption::Mode(
+                async_openai::types::chat::ToolChoiceOptions::Auto,
+            )),
+            ..Default::default()
+        };
+
+        // 调用 OpenAI API
+        let response = self.inner.client.chat().create(request).await?;
+        let message = &response.choices[0].message;
+
+        // 检查是否有工具调用
+        if let Some(ref tool_calls) = message.tool_calls {
+            tracing::info!("AI 请求调用 {} 个工具", tool_calls.len());
+
+            // 记录 assistant 的工具调用消息
+            {
+                let mut conv = self.inner.conversation.write().await;
+                // 需要先记录 assistant 消息（包含 tool_calls）
+                for tool_call_enum in tool_calls {
+                    // 只处理 Function 类型的工具调用
+                    if let async_openai::types::chat::ChatCompletionMessageToolCalls::Function(tool_call) = tool_call_enum {
+                        // 解析参数
+                        let args: serde_json::Value = serde_json::from_str(&tool_call.function.arguments)
+                            .unwrap_or(serde_json::Value::Null);
+                        
+                        conv.add_tool_call_message(
+                            session_id,
+                            tool_call.id.clone(),
+                            tool_call.function.name.clone(),
+                            args,
+                        );
+                    }
+                }
+            }
+
+            // 执行每个工具调用
+            for tool_call_enum in tool_calls {
+                // 只处理 Function 类型的工具调用
+                if let async_openai::types::chat::ChatCompletionMessageToolCalls::Function(tool_call) = tool_call_enum {
+                    tracing::info!(
+                        "执行工具: {} (id: {})",
+                        tool_call.function.name,
+                        tool_call.id
+                    );
+
+                    // 解析参数
+                    let args: serde_json::Value = serde_json::from_str(&tool_call.function.arguments)
+                        .unwrap_or(serde_json::Value::Null);
+
+                    // 执行工具
+                    let result = self.execute_tool(&tool_call.function.name, args).await?;
+
+                    // 记录工具结果
+                    {
+                        let mut conv = self.inner.conversation.write().await;
+                        conv.add_tool_result_message(session_id, tool_call.id.clone(), result);
+                    }
+                }
+            }
+
+            // 递归调用，让 AI 处理工具结果
+            tracing::debug!("工具执行完成，继续让 AI 处理结果");
+            return Box::pin(self.chat_with_tools(session_id, "", system_prompt)).await;
+        }
+
+        // 没有工具调用，返回文本回复
+        let content = message.content.clone().unwrap_or_default();
+
+        // 保存 AI 回复到历史
+        {
+            let mut conv = self.inner.conversation.write().await;
+            conv.add_assistant_message(session_id, &content);
+        }
+
+        Ok(content)
+    }
+
+    /// 执行工具调用。
+    ///
+    /// # Arguments
+    ///
+    /// * `tool_name` - 工具名称
+    /// * `arguments` - 工具参数
+    ///
+    /// # Returns
+    ///
+    /// 返回工具执行结果（JSON 格式）
+    async fn execute_tool(
+        &self,
+        tool_name: &str,
+        arguments: serde_json::Value,
+    ) -> Result<serde_json::Value> {
+        // 获取 MCP 注册表
+        let mcp_registry = self.inner.mcp_registry.as_ref()
+            .ok_or_else(|| anyhow::anyhow!("MCP not enabled"))?;
+
+        // 执行工具
+        let registry = mcp_registry.read().await;
+        let result = registry.execute_tool(tool_name, arguments).await?;
+
+        // 将 ToolResult 转换为 JSON
+        Ok(serde_json::to_value(result)?)
+    }
+
     /// 执行带自定义系统提示词的聊天。
     ///
     /// 与 [`chat`](AiService::chat) 类似，但允许覆盖默认的系统提示词。
