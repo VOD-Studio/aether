@@ -383,7 +383,7 @@ mod tests {
     fn test_create_persona_sets_is_builtin_false() {
         let (store, _temp_dir) = create_test_store();
 
-        let mut persona = Persona {
+        let persona = Persona {
             id: "custom-2".to_string(),
             name: "Custom".to_string(),
             system_prompt: "Prompt".to_string(),
