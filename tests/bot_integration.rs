@@ -158,7 +158,7 @@ mod bot_tests {
         server
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_bot_new_with_valid_config() {
         let temp_dir = TempDir::new().expect("Failed to create temp dir");
         let store_path = temp_dir.path().join("store").to_string_lossy().to_string();
@@ -175,12 +175,14 @@ mod bot_tests {
         );
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_bot_new_with_device_id() {
+        let _ = tracing_subscriber::fmt::try_init();
         let temp_dir = TempDir::new().expect("Failed to create temp dir");
         let store_path = temp_dir.path().join("store").to_string_lossy().to_string();
 
         let server = MockServer::start().await;
+        tracing::info!("Mock server started at {}", server.uri());
 
         // Mock endpoints
         Mock::given(method("GET"))
@@ -216,7 +218,9 @@ mod bot_tests {
         let mut config = create_test_config(&server.uri(), &store_path);
         config.matrix_device_id = Some("MY_DEVICE_ID".to_string());
 
+        tracing::info!("Creating Bot...");
         let result = Bot::new(config).await;
+        tracing::info!("Bot creation result: {:?}", result.is_ok());
 
         assert!(
             result.is_ok(),
@@ -225,7 +229,7 @@ mod bot_tests {
         );
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_bot_new_with_invalid_homeserver() {
         let temp_dir = TempDir::new().expect("Failed to create temp dir");
         let store_path = temp_dir.path().join("store").to_string_lossy().to_string();

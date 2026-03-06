@@ -59,7 +59,7 @@ fn mock_vision_response(description: &str) -> serde_json::Value {
 mod vision_tests {
     use super::*;
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_chat_with_image_success() {
         let server = MockServer::start().await;
 
@@ -86,7 +86,7 @@ mod vision_tests {
         assert_eq!(response, "This is a cat sitting on a chair.");
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_chat_with_image_empty_response() {
         let server = MockServer::start().await;
 
@@ -122,7 +122,7 @@ mod vision_tests {
         assert_eq!(response, "");
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_chat_with_image_trait_method() {
         let server = MockServer::start().await;
 
@@ -152,7 +152,7 @@ mod vision_tests {
         assert_eq!(response, "A beautiful landscape.");
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_chat_with_image_multiple_sessions() {
         let server = MockServer::start().await;
 

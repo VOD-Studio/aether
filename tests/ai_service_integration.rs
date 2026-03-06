@@ -67,7 +67,7 @@ fn mock_chat_success_response(content: &str) -> serde_json::Value {
 mod chat_tests {
     use super::*;
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_chat_success() {
         let server = MockServer::start().await;
 
@@ -87,7 +87,7 @@ mod chat_tests {
         assert_eq!(response, "Hello! How can I help?");
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_chat_empty_response() {
         let server = MockServer::start().await;
 
@@ -117,7 +117,7 @@ mod chat_tests {
         assert_eq!(response, "");
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_chat_with_system_prompt() {
         let server = MockServer::start().await;
 
@@ -147,7 +147,7 @@ mod chat_tests {
 mod conversation_tests {
     use super::*;
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_session_isolation() {
         let server = MockServer::start().await;
 
@@ -179,7 +179,7 @@ mod conversation_tests {
         assert_eq!(response_b2, "Response");
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_reset_conversation() {
         let server = MockServer::start().await;
 
@@ -207,7 +207,7 @@ mod conversation_tests {
         // 这里主要通过无错误来验证
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_multiple_messages_in_session() {
         let server = MockServer::start().await;
 
@@ -238,7 +238,7 @@ mod conversation_tests {
 mod trait_tests {
     use super::*;
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_trait_chat_delegates_correctly() {
         let server = MockServer::start().await;
 
@@ -261,7 +261,7 @@ mod trait_tests {
         assert_eq!(response, "Trait response");
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_trait_reset_delegates_correctly() {
         let server = MockServer::start().await;
 

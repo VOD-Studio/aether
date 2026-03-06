@@ -142,7 +142,7 @@ impl AiService {
         Ok(content)
     }
 
-/// 执行带自定义系统提示词的聊天。
+    /// 执行带自定义系统提示词的聊天。
     ///
     /// 与 [`chat`](AiService::chat) 类似，但允许覆盖默认的系统提示词。
     /// 适用于人设系统等需要动态改变 AI 行为的场景。
@@ -567,7 +567,8 @@ impl AiServiceTrait for AiService {
         prompt: &str,
         system_prompt: Option<&str>,
     ) -> Result<String> {
-        self.chat_with_system(session_id, prompt, system_prompt).await
+        self.chat_with_system(session_id, prompt, system_prompt)
+            .await
     }
 
     async fn reset_conversation(&self, session_id: &str) {
@@ -606,7 +607,8 @@ impl AiServiceTrait for AiService {
         Arc<Mutex<StreamingState>>,
         Pin<Box<dyn Stream<Item = Result<String>> + Send>>,
     )> {
-        self.chat_stream_with_system(session_id, prompt, system_prompt).await
+        self.chat_stream_with_system(session_id, prompt, system_prompt)
+            .await
     }
 }
 

@@ -319,16 +319,29 @@ impl<T: AiServiceTrait> EventHandler<T> {
                 debug!("处理消息 [{}]: {}", session_id, clean_text);
 
                 if self.streaming_enabled {
-                    self.handle_streaming_response(&room, &session_id, &clean_text, system_prompt.as_deref())
-                        .await?;
+                    self.handle_streaming_response(
+                        &room,
+                        &session_id,
+                        &clean_text,
+                        system_prompt.as_deref(),
+                    )
+                    .await?;
                 } else {
-                    self.handle_normal_response(&room, &session_id, &clean_text, system_prompt.as_deref())
-                        .await?;
+                    self.handle_normal_response(
+                        &room,
+                        &session_id,
+                        &clean_text,
+                        system_prompt.as_deref(),
+                    )
+                    .await?;
                 }
             }
-MessageType::Image(image_msg) if self.vision_enabled => {
+            MessageType::Image(image_msg) if self.vision_enabled => {
                 debug!("处理图片消息 [{}]", session_id);
-                match self.handle_image_message(&room, &session_id, image_msg, system_prompt.as_deref()).await {
+                match self
+                    .handle_image_message(&room, &session_id, image_msg, system_prompt.as_deref())
+                    .await
+                {
                     Ok(_) => {}
                     Err(e) => {
                         warn!("图片处理失败: {}", e);
@@ -338,8 +351,6 @@ MessageType::Image(image_msg) if self.vision_enabled => {
                         )))
                         .await?;
                     }
-                }
-            }
                 }
             }
             _ => {}
@@ -353,7 +364,7 @@ MessageType::Image(image_msg) if self.vision_enabled => {
         room: &Room,
         session_id: &str,
         image_msg: &matrix_sdk::ruma::events::room::message::ImageMessageEventContent,
-        system_prompt: Option<&str>,
+        _system_prompt: Option<&str>,
     ) -> Result<()> {
         let mxc_uri = match &image_msg.source {
             matrix_sdk::ruma::events::room::MediaSource::Plain(uri) => uri,
@@ -385,7 +396,11 @@ MessageType::Image(image_msg) if self.vision_enabled => {
         clean_text: &str,
         system_prompt: Option<&str>,
     ) -> Result<()> {
-        match self.ai_service.chat_with_system(session_id, clean_text, system_prompt).await {
+        match self
+            .ai_service
+            .chat_with_system(session_id, clean_text, system_prompt)
+            .await
+        {
             Ok(reply) => {
                 room.send(RoomMessageEventContent::text_plain(reply))
                     .await?;
@@ -436,7 +451,11 @@ MessageType::Image(image_msg) if self.vision_enabled => {
         system_prompt: Option<&str>,
     ) -> Result<()> {
         // 开始流式聊天
-        let (state, mut stream) = match self.ai_service.chat_stream_with_system(session_id, clean_text, system_prompt).await {
+        let (state, mut stream) = match self
+            .ai_service
+            .chat_stream_with_system(session_id, clean_text, system_prompt)
+            .await
+        {
             Ok(result) => result,
             Err(e) => {
                 warn!("流式 AI 调用初始化失败: {}", e);

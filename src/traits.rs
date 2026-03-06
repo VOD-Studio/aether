@@ -332,3 +332,55 @@ impl MessageSender for RoomSender {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_streaming_state_new_creates_empty() {
+        let state = StreamingState::new();
+        assert!(state.content().is_empty());
+    }
+
+    #[test]
+    fn test_append_adds_text() {
+        let mut state = StreamingState::new();
+        state.append("Hello");
+        assert_eq!(state.content(), "Hello");
+    }
+
+    #[test]
+    fn test_content_returns_accumulated() {
+        let mut state = StreamingState::new();
+        state.accumulated = "Test content".to_string();
+        assert_eq!(state.content(), "Test content");
+    }
+
+    #[test]
+    fn test_multiple_appends() {
+        let mut state = StreamingState::new();
+        state.append("Hello");
+        state.append(" ");
+        state.append("World");
+        assert_eq!(state.content(), "Hello World");
+    }
+
+    #[test]
+    fn test_streaming_state_default_is_empty() {
+        let state = StreamingState::default();
+        assert!(state.content().is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_chat_stream_response_type_works() {
+        let state = Arc::new(Mutex::new(StreamingState::new()));
+
+        {
+            let mut s = state.lock().await;
+            s.append("Test");
+        }
+
+        assert_eq!(state.lock().await.content(), "Test");
+    }
+}
