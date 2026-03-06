@@ -18,7 +18,10 @@ dotenvy = "0.15"
 futures-util = "0.3"
 base64 = "0.22"
 image = "0.25"
-reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "http2"] }
+reqwest = { version = "0.12", default-features = false, features = [
+    "rustls-tls",
+    "http2",
+] }
 mime = "0.3"
 rusqlite = { version = "0.37", features = ["bundled"] }
 
@@ -34,9 +37,10 @@ matrix-sdk-test = "0.16.0"
 serial_test = "3"
 
 [profile.release]
-opt-level = 3     # 最高优化级别
-lto = "fat"       # 链接时优化，跨 crate 全局优化
-codegen-units = 1 # 单个代码生成单元，允许更好的优化
-panic = "abort"   # abort 而非 unwind，减小二进制并提升性能
-strip = true      # 剥离符号信息，减小二进制大小
-# overflow-checks = false # 禁用运行时溢出检查
+opt-level = 3 # 最高优化级别
+# lto = "fat"       # 链接时优化，跨 crate 全局优化
+lto = true              # 链接时优化，跨 crate 全局优化
+codegen-units = 1       # 单个代码生成单元，允许更好的优化
+panic = "abort"         # abort 而非 unwind，减小二进制并提升性能
+strip = true            # 剥离符号信息，减小二进制大小
+overflow-checks = false # 禁用运行时溢出检查

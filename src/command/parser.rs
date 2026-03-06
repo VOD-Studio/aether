@@ -1,40 +1,130 @@
-//! 命令解析器
+//! # 命令解析器
+//!
+//! 提供命令解析功能，支持引号包裹的参数。
 
-/// 解析后的命令
+/// 解析后的命令结构。
+///
+/// 包含主命令和参数列表，由 [`Parser::parse()`] 返回。
+///
+/// # Example
+///
+/// ```ignore
+/// // 输入: "!bot name 新名称"
+/// let parsed = parser.parse("!bot name 新名称").unwrap();
+/// assert_eq!(parsed.cmd, "bot");
+/// assert_eq!(parsed.args, vec!["name", "新名称"]);
+/// ```
 #[derive(Debug, Clone)]
 pub struct ParsedCommand<'a> {
-    /// 主命令
+    /// 主命令名称（不含前缀）。
+    ///
+    /// 例如 `!help` 解析后 cmd 为 `"help"`。
     pub cmd: &'a str,
-    /// 参数列表（第一个参数可作为子命令）
+    /// 参数列表。
+    ///
+    /// 第一个参数可作为子命令，支持引号包裹的参数。
+    /// 例如 `!meme top "上方文字"` 解析后 args 为 `["top", "上方文字"]`。
     pub args: Vec<&'a str>,
 }
 
-/// 命令解析器
+/// 命令解析器。
+///
+/// 负责从消息文本中提取命令和参数，支持：
+/// - 自定义命令前缀
+/// - 引号包裹的参数（单引号或双引号）
+/// - 自动去除空白字符
+///
+/// # Example
+///
+/// ```
+/// use aether_matrix::command::Parser;
+///
+/// let parser = Parser::new("!".to_string());
+///
+/// // 简单命令
+/// let cmd = parser.parse("!help").unwrap();
+/// assert_eq!(cmd.cmd, "help");
+///
+/// // 带参数的命令
+/// let cmd = parser.parse("!bot name 新名称").unwrap();
+/// assert_eq!(cmd.cmd, "bot");
+/// assert_eq!(cmd.args, vec!["name", "新名称"]);
+///
+/// // 引号包裹的参数
+/// let cmd = parser.parse("!meme top \"上方文字\"").unwrap();
+/// assert_eq!(cmd.args, vec!["top", "上方文字"]);
+/// ```
 #[derive(Clone)]
 pub struct Parser {
-    /// 命令前缀
+    /// 命令前缀，如 `"!"` 或 `"!ai "`。
     prefix: String,
 }
 
 impl Parser {
-    /// 创建新的解析器
+    /// 创建新的命令解析器。
+    ///
+    /// # Arguments
+    ///
+    /// * `prefix` - 命令前缀，如 `"!"` 或 `"!ai "`
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use aether_matrix::command::Parser;
+    ///
+    /// let parser = Parser::new("!".to_string());
+    /// ```
     pub fn new(prefix: String) -> Self {
         Self { prefix }
     }
 
-    /// 获取命令前缀
+    /// 获取当前命令前缀。
     #[allow(dead_code)]
     pub fn prefix(&self) -> &str {
         &self.prefix
     }
 
-    /// 更新命令前缀
+    /// 更新命令前缀。
     #[allow(dead_code)]
     pub fn set_prefix(&mut self, prefix: String) {
         self.prefix = prefix;
     }
 
-    /// 解析消息，提取命令
+    /// 解析消息，提取命令和参数。
+    ///
+    /// 解析流程：
+    /// 1. 去除首尾空白
+    /// 2. 检查是否以命令前缀开头
+    /// 3. 移除前缀
+    /// 4. 分词（支持引号包裹）
+    /// 5. 提取命令和参数
+    ///
+    /// # Arguments
+    ///
+    /// * `msg` - 原始消息文本
+    ///
+    /// # Returns
+    ///
+    /// - 如果消息是有效命令，返回 `Some(ParsedCommand)`
+    /// - 如果消息不是命令或格式无效，返回 `None`
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use aether_matrix::command::Parser;
+    ///
+    /// let parser = Parser::new("!".to_string());
+    ///
+    /// // 有效命令
+    /// let cmd = parser.parse("!help").unwrap();
+    /// assert_eq!(cmd.cmd, "help");
+    ///
+    /// // 无效命令（无前缀）
+    /// assert!(parser.parse("help").is_none());
+    ///
+    /// // 无效命令（前缀后为空）
+    /// assert!(parser.parse("!   ").is_none());
+    /// ```
     pub fn parse<'a>(&self, msg: &'a str) -> Option<ParsedCommand<'a>> {
         let msg = msg.trim();
 
@@ -68,7 +158,29 @@ impl Parser {
         Some(ParsedCommand { cmd, args })
     }
 
-    /// 分词，支持引号包裹的参数
+    /// 分词，支持引号包裹的参数。
+    ///
+    /// 算法说明：
+    /// - 按空白字符分割
+    /// - 支持双引号 `"` 和单引号 `'` 包裹的参数
+    /// - 引号内的空白字符保留
+    /// - 未闭合的引号，取到字符串末尾
+    ///
+    /// # Arguments
+    ///
+    /// * `input` - 输入字符串（已移除命令前缀）
+    ///
+    /// # Returns
+    ///
+    /// 返回分词结果列表。
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// // 内部方法，通过 parse 间接使用
+    /// let tokens = Parser::tokenize("cmd \"arg with space\" simple");
+    /// assert_eq!(tokens, vec!["cmd", "arg with space", "simple"]);
+    /// ```
     fn tokenize(input: &str) -> Vec<&str> {
         let mut tokens = Vec::new();
         let mut i = 0;
@@ -114,7 +226,29 @@ impl Parser {
         tokens
     }
 
-    /// 检查消息是否以命令前缀开头
+    /// 检查消息是否以命令前缀开头。
+    ///
+    /// 快速判断消息是否可能是命令，比 `parse()` 更高效。
+    ///
+    /// # Arguments
+    ///
+    /// * `msg` - 原始消息文本
+    ///
+    /// # Returns
+    ///
+    /// 如果消息以命令前缀开头返回 `true`，否则返回 `false`。
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use aether_matrix::command::Parser;
+    ///
+    /// let parser = Parser::new("!".to_string());
+    ///
+    /// assert!(parser.is_command("!help"));
+    /// assert!(parser.is_command("  !help  ")); // 自动去除空白
+    /// assert!(!parser.is_command("help"));
+    /// ```
     pub fn is_command(&self, msg: &str) -> bool {
         msg.trim().starts_with(&self.prefix)
     }

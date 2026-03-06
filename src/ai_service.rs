@@ -1,3 +1,47 @@
+//! # AI 服务模块
+//!
+//! 提供 OpenAI 兼容 API 的封装服务，支持聊天、流式输出和图片理解。
+//!
+//! ## 核心类型
+//!
+//! - [`AiService`]: OpenAI API 封装服务，实现 [`AiServiceTrait`]
+//! - [`AiServiceInner`]: 内部实现，使用 `Arc` 包装支持共享
+//!
+//! ## 功能特性
+//!
+//! - **普通聊天**: 一次性返回完整回复
+//! - **流式聊天**: 打字机效果，支持节流控制
+//! - **图片理解**: Vision API，分析图片内容
+//! - **多会话管理**: 按 session_id 隔离对话历史
+//! - **自定义系统提示词**: 支持人设系统
+//!
+//! ## 设计模式
+//!
+//! `AiService` 使用 `Arc<AiServiceInner>` 模式：
+//! - 克隆开销小（只复制 Arc 指针）
+//! - 可在多处共享同一实例
+//! - 内部状态使用 `RwLock` 保护
+//!
+//! # Example
+//!
+//! ```no_run
+//! use aether_matrix::ai_service::AiService;
+//! use aether_matrix::config::Config;
+//!
+//! async fn example() -> anyhow::Result<()> {
+//!     let config = Config::from_env()?;
+//!     let service = AiService::new(&config);
+//!
+//!     // 普通聊天
+//!     let reply = service.chat("user-1", "Hello!").await?;
+//!
+//!     // 流式聊天
+//!     let (state, stream) = service.chat_stream("user-1", "Tell me a story").await?;
+//!
+//!     Ok(())
+//! }
+//! ```
+
 use std::pin::Pin;
 use std::sync::Arc;
 use tokio::sync::{Mutex, RwLock};
