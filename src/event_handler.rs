@@ -235,7 +235,6 @@ impl<T: AiServiceTrait> EventHandler<T> {
 
         // 获取消息文本
         let text = original.content.body();
-        let event_id = original.event_id.clone();
 
         let room_id = room.room_id();
 
@@ -259,13 +258,7 @@ impl<T: AiServiceTrait> EventHandler<T> {
         if is_command {
             info!("分发命令: {}", text);
             self.command_gateway
-                .dispatch(
-                    &client,
-                    room.clone(),
-                    original.sender.clone(),
-                    text,
-                    event_id.clone(),
-                )
+                .dispatch(&client, room.clone(), original.sender.clone(), text)
                 .await?;
             return Ok(());
         }

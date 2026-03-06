@@ -36,18 +36,6 @@ pub trait CommandHandler: Send + Sync {
     async fn execute(&self, ctx: &CommandContext<'_>) -> Result<()>;
 }
 
-/// 子命令信息
-#[derive(Debug, Clone)]
-#[allow(dead_code)]
-pub struct SubCommand {
-    /// 子命令名称
-    pub name: String,
-    /// 描述
-    pub description: String,
-    /// 使用说明
-    pub usage: String,
-}
-
 /// 命令注册表
 #[derive(Clone)]
 pub struct CommandRegistry {
@@ -74,6 +62,7 @@ impl CommandRegistry {
     }
 
     /// 获取所有命令名称
+    #[allow(dead_code)]
     pub fn commands(&self) -> Vec<&str> {
         self.handlers.keys().map(|s| s.as_str()).collect()
     }
