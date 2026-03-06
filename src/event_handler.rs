@@ -693,7 +693,7 @@ mod tests {
             command_prefix: "!".to_string(),
             max_history: 10,
             bot_owners: Vec::new(),
-            db_path: "./data/aether.db".to_string(),
+            db_path: "./store/aether.db".to_string(),
             streaming_enabled: false,
             streaming_min_interval_ms: 500,
             streaming_min_chars: 10,
