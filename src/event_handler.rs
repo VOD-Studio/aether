@@ -498,7 +498,7 @@ impl<T: AiServiceTrait> EventHandler<T> {
                             let response = room
                                 .send(RoomMessageEventContent::text_plain(&content))
                                 .await?;
-                            event_id = Some(response.event_id);
+                            event_id = Some(response.response.event_id);
                         }
 
                         // 重置计数器

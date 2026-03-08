@@ -4,7 +4,7 @@ version = "0.1.1"
 edition = "2024"
 
 [dependencies]
-matrix-sdk = "0.16.0"
+matrix-sdk = { git = "https://github.com/matrix-org/matrix-rust-sdk", branch = "main" }
 async-openai = { version = "0.33", features = ["chat-completion"] }
 async-trait = "0.1"
 tokio = { version = "1", features = ["full"] }
@@ -18,28 +18,29 @@ dotenvy = "0.15"
 futures-util = "0.3"
 base64 = "0.22"
 image = "0.25"
-reqwest = { version = "0.12", default-features = false, features = [
-    "rustls-tls",
+reqwest = { version = "0.13", default-features = false, features = [
+    "rustls",
+    "rustls-native-certs",
     "http2",
 ] }
 mime = "0.3"
 rusqlite = { version = "0.37", features = ["bundled"] }
 
 # MCP dependencies
-schemars = { version = "0.8", features = ["derive"] }
-scraper = "0.22"
+schemars = { version = "1.2", features = ["derive"] }
+scraper = "0.25"
 regex = "1"
 url = "2.5"
 
 [dev-dependencies]
 tokio-test = "0.4"
 wiremock = "0.6"
-mockall = "0.13"
+mockall = "0.14"
 tempfile = "3"
 lazy_static = "1"
 tokio-stream = "0.1"
 futures = "0.3"
-matrix-sdk-test = "0.16.0"
+matrix-sdk-test = { git = "https://github.com/matrix-org/matrix-rust-sdk", branch = "main" }
 serial_test = "3"
 
 [profile.release]
