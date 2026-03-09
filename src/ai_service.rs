@@ -114,20 +114,20 @@ impl AiService {
     /// * `config` - 机器人配置，包含 API 密钥、模型等设置
     pub fn new(config: &Config) -> Self {
         let openai_config = OpenAIConfig::new()
-            .with_api_key(&config.openai_api_key)
-            .with_api_base(&config.openai_base_url);
+            .with_api_key(&config.openai.api_key)
+            .with_api_base(&config.openai.base_url);
 
         Self {
             inner: Arc::new(AiServiceInner {
                 client: Client::with_config(openai_config),
-                model: config.openai_model.clone(),
+                model: config.openai.model.clone(),
                 vision_model: config
-                    .vision_model
+                    .vision.model
                     .clone()
-                    .unwrap_or_else(|| config.openai_model.clone()),
+                    .unwrap_or_else(|| config.openai.model.clone()),
                 conversation: Arc::new(RwLock::new(ConversationManager::new(
-                    config.system_prompt.clone(),
-                    config.max_history,
+                    config.openai.system_prompt.clone(),
+                    config.bot.max_history,
                 ))),
                 mcp_registry: if config.mcp.enabled {
                     Some(Arc::new(RwLock::new(crate::mcp::ToolRegistry::new(

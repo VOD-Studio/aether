@@ -1,0 +1,81 @@
+# ===========================================
+# Aether Matrix Bot 配置文件示例
+# ===========================================
+# 复制此文件为 config.toml 并填写配置
+#
+# 配置优先级：环境变量 > TOML 配置 > 默认值
+# 即环境变量可以覆盖 TOML 中的配置
+
+# Matrix 连接配置
+[matrix]
+homeserver = "https://matrix.org"
+username = "@your-bot:matrix.org"
+password = "your-password"
+# device_id = "AETHER_BOT_001"  # 可选，持久化设备 ID，避免重复登录创建新设备
+device_display_name = "AI Bot"
+store_path = "./store"
+
+# OpenAI API 配置
+[openai]
+api_key = "sk-..."
+base_url = "https://api.openai.com/v1"
+model = "gpt-4o-mini"
+# system_prompt = "你是一个有帮助的 AI 助手"
+
+# 机器人行为配置
+[bot]
+command_prefix = "!"
+max_history = 10
+# owners = ["@admin:matrix.org"]  # Bot 管理员列表
+db_path = "./data/aether.db"
+
+# 流式输出配置
+[streaming]
+enabled = true
+min_interval_ms = 1000
+min_chars = 50
+
+# Vision 配置
+[vision]
+enabled = true
+# model = "gpt-4o-mini"  # 可选，默认使用 openai.model
+max_image_size = 1024
+
+# 日志配置
+[log]
+level = "info"
+
+# 代理配置（可选）
+# proxy = "http://127.0.0.1:7890"
+
+# MCP (Model Context Protocol) 配置
+[mcp]
+enabled = true
+
+[mcp.builtin_tools]
+enabled = true
+
+[mcp.builtin_tools.web_fetch]
+enabled = true
+max_length = 10000
+timeout = 10
+
+# 外部 MCP 服务器示例
+# [[mcp.external_servers]]
+# name = "filesystem"
+# transport = "stdio"
+# command = "mcp-server-filesystem"
+# args = ["/home/user/documents"]
+# enabled = true
+
+# [[mcp.external_servers]]
+# name = "database"
+# transport = "http"
+# url = "http://localhost:3000/mcp"
+# enabled = true
+
+# [[mcp.external_servers]]
+# name = "database"
+# transport = "http"
+# url = "http://localhost:3000/mcp"
+# enabled = true

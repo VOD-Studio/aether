@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Deserialize)]
 pub struct McpConfig {
     /// 是否启用 MCP 功能
-    #[serde(default)]
+    #[serde(default = "default_mcp_enabled")]
     pub enabled: bool,
 
     /// 内置工具配置
@@ -18,6 +18,10 @@ pub struct McpConfig {
     /// 外部 MCP 服务器配置
     #[serde(default)]
     pub external_servers: Vec<ExternalServerConfig>,
+}
+
+fn default_mcp_enabled() -> bool {
+    true
 }
 
 impl Default for McpConfig {
@@ -136,69 +140,57 @@ pub enum TransportType {
 }
 
 impl McpConfig {
-    /// 从环境变量加载配置
-    pub fn from_env() -> Result<Self, anyhow::Error> {
-        let enabled = std::env::var("MCP_ENABLED")
-            .ok()
-            .map(|s| s.to_lowercase() != "false")
-            .unwrap_or(true);
+    /// 环境变量覆盖（由主 Config 调用）
+    pub fn apply_env_overrides(&mut self) {
+        if let Ok(v) = std::env::var("MCP_ENABLED") {
+            self.enabled = v.to_lowercase() != "false";
+        }
 
-        let builtin_tools = BuiltinToolsConfig::from_env()?;
+        self.builtin_tools.apply_env_overrides();
 
-        let external_servers = if let Ok(servers_json) = std::env::var("MCP_EXTERNAL_SERVERS") {
-            serde_json::from_str(&servers_json).unwrap_or_else(|e| {
-                tracing::warn!("Failed to parse MCP_EXTERNAL_SERVERS: {}", e);
-                Vec::new()
-            })
-        } else {
-            Vec::new()
-        };
-
-        Ok(Self {
-            enabled,
-            builtin_tools,
-            external_servers,
-        })
+        // 保留 MCP_EXTERNAL_SERVERS JSON 支持（向后兼容，标记为 deprecated）
+        if let Ok(json) = std::env::var("MCP_EXTERNAL_SERVERS") {
+            match serde_json::from_str(&json) {
+                Ok(servers) => {
+                    tracing::warn!(
+                        "MCP_EXTERNAL_SERVERS 环境变量已弃用，请使用 config.toml 的 [[mcp.external_servers]] 配置外部服务器"
+                    );
+                    self.external_servers = servers;
+                }
+                Err(e) => {
+                    tracing::warn!("MCP_EXTERNAL_SERVERS JSON 解析失败: {}", e);
+                }
+            }
+        }
     }
 }
 
 impl BuiltinToolsConfig {
-    /// 从环境变量加载配置
-    pub fn from_env() -> Result<Self, anyhow::Error> {
-        let enabled = std::env::var("MCP_BUILTIN_TOOLS_ENABLED")
-            .ok()
-            .map(|s| s.to_lowercase() != "false")
-            .unwrap_or(true);
-
-        let web_fetch = WebFetchConfig::from_env()?;
-
-        Ok(Self { enabled, web_fetch })
+    /// 环境变量覆盖（由 McpConfig 调用）
+    pub fn apply_env_overrides(&mut self) {
+        if let Ok(v) = std::env::var("MCP_BUILTIN_TOOLS_ENABLED") {
+            self.enabled = v.to_lowercase() != "false";
+        }
+        self.web_fetch.apply_env_overrides();
     }
 }
 
 impl WebFetchConfig {
-    /// 从环境变量加载配置
-    pub fn from_env() -> Result<Self, anyhow::Error> {
-        let enabled = std::env::var("MCP_BUILTIN_WEB_FETCH_ENABLED")
-            .ok()
-            .map(|s| s.to_lowercase() != "false")
-            .unwrap_or(true);
-
-        let max_length = std::env::var("MCP_BUILTIN_WEB_FETCH_MAX_LENGTH")
-            .ok()
-            .and_then(|s| s.parse().ok())
-            .unwrap_or(10000);
-
-        let timeout = std::env::var("MCP_BUILTIN_WEB_FETCH_TIMEOUT")
-            .ok()
-            .and_then(|s| s.parse().ok())
-            .unwrap_or(10);
-
-        Ok(Self {
-            enabled,
-            max_length,
-            timeout,
-        })
+    /// 环境变量覆盖（由 BuiltinToolsConfig 调用）
+    pub fn apply_env_overrides(&mut self) {
+        if let Ok(v) = std::env::var("MCP_BUILTIN_WEB_FETCH_ENABLED") {
+            self.enabled = v.to_lowercase() != "false";
+        }
+        if let Ok(v) = std::env::var("MCP_BUILTIN_WEB_FETCH_MAX_LENGTH") {
+            if let Ok(n) = v.parse() {
+                self.max_length = n;
+            }
+        }
+        if let Ok(v) = std::env::var("MCP_BUILTIN_WEB_FETCH_TIMEOUT") {
+            if let Ok(n) = v.parse() {
+                self.timeout = n;
+            }
+        }
     }
 }
 
@@ -235,5 +227,59 @@ mod tests {
         let json = r#""sse""#;
         let transport: TransportType = serde_json::from_str(json).unwrap();
         assert_eq!(transport, TransportType::Sse);
+    }
+
+    #[test]
+    fn test_toml_parsing() {
+        let toml_str = r#"
+            enabled = true
+
+            [builtin_tools]
+            enabled = true
+
+            [builtin_tools.web_fetch]
+            enabled = true
+            max_length = 20000
+            timeout = 30
+
+            [[external_servers]]
+            name = "filesystem"
+            transport = "stdio"
+            command = "mcp-server-filesystem"
+            args = ["/home/user/documents"]
+            enabled = true
+
+            [[external_servers]]
+            name = "database"
+            transport = "http"
+            url = "http://localhost:3000/mcp"
+            enabled = true
+        "#;
+
+        let config: McpConfig = toml::from_str(toml_str).expect("TOML 解析应成功");
+        assert!(config.enabled);
+        assert!(config.builtin_tools.enabled);
+        assert!(config.builtin_tools.web_fetch.enabled);
+        assert_eq!(config.builtin_tools.web_fetch.max_length, 20000);
+        assert_eq!(config.builtin_tools.web_fetch.timeout, 30);
+        assert_eq!(config.external_servers.len(), 2);
+
+        assert_eq!(config.external_servers[0].name, "filesystem");
+        assert_eq!(config.external_servers[0].transport, TransportType::Stdio);
+        assert_eq!(
+            config.external_servers[0].command,
+            Some("mcp-server-filesystem".to_string())
+        );
+        assert_eq!(
+            config.external_servers[0].args,
+            Some(vec!["/home/user/documents".to_string()])
+        );
+
+        assert_eq!(config.external_servers[1].name, "database");
+        assert_eq!(config.external_servers[1].transport, TransportType::Http);
+        assert_eq!(
+            config.external_servers[1].url,
+            Some("http://localhost:3000/mcp".to_string())
+        );
     }
 }
