@@ -30,7 +30,7 @@
 //!
 //! async fn example() -> anyhow::Result<()> {
 //!     let config = Config::from_env()?;
-//!     let service = AiService::new(&config);
+//!     let service = AiService::new(&config).await;
 //!
 //!     // 普通聊天
 //!     let reply = service.chat("user-1", "Hello!").await?;
@@ -77,7 +77,7 @@ use crate::mcp::McpServerManager;
 ///
 /// async fn example() {
 ///     let config = Config::default();
-///     let service = AiService::new(&config);
+///     let service = AiService::new(&config).await;
 ///
 ///     // 克隆服务（共享内部状态）
 ///     let service_clone = service.clone();

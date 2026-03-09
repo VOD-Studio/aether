@@ -94,6 +94,23 @@ impl AiServiceTrait for MockAiService {
     ) -> Result<ChatStreamResponse> {
         anyhow::bail!("Streaming not supported in mock")
     }
+
+    async fn chat_with_tools(
+        &self,
+        _session_id: &str,
+        prompt: &str,
+        _system_prompt: Option<&str>,
+    ) -> Result<String> {
+        self.chat_with_system(_session_id, prompt, _system_prompt).await
+    }
+
+    fn mcp_server_manager(&self) -> Option<Arc<RwLock<aether_matrix::mcp::McpServerManager>>> {
+        None
+    }
+
+    async fn list_mcp_tools(&self) -> Vec<aether_matrix::mcp::ToolDefinition> {
+        vec![]
+    }
 }
 
 fn create_test_config() -> Config {

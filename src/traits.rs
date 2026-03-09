@@ -22,8 +22,8 @@
 //! use aether_matrix::ai_service::AiService;
 //!
 //! // 在生产环境中使用真实实现
-//! fn create_service(config: &aether_matrix::config::Config) -> impl AiServiceTrait {
-//!     AiService::new(config)
+//! async fn create_service(config: &aether_matrix::config::Config) -> impl AiServiceTrait {
+//!     AiService::new(config).await
 //! }
 //! ```
 

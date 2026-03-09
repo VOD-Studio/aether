@@ -31,6 +31,9 @@ mock! {
             std::sync::Arc<tokio::sync::Mutex<aether_matrix::traits::StreamingState>>,
             std::pin::Pin<Box<dyn futures_util::Stream<Item = anyhow::Result<String>> + Send>>,
         )>;
+        async fn chat_with_tools<'a>(&self, session_id: &str, prompt: &str, system_prompt: Option<&'a str>) -> anyhow::Result<String>;
+        fn mcp_server_manager(&self) -> Option<std::sync::Arc<tokio::sync::RwLock<aether_matrix::mcp::McpServerManager>>>;
+        async fn list_mcp_tools(&self) -> Vec<aether_matrix::mcp::ToolDefinition>;
     }
 }
 

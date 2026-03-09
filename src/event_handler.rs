@@ -711,6 +711,23 @@ mod tests {
         ) -> anyhow::Result<crate::traits::ChatStreamResponse> {
             unimplemented!()
         }
+
+        async fn chat_with_tools(
+            &self,
+            _session_id: &str,
+            _prompt: &str,
+            _system_prompt: Option<&str>,
+        ) -> anyhow::Result<String> {
+            Ok("mock response".to_string())
+        }
+
+        fn mcp_server_manager(&self) -> Option<std::sync::Arc<tokio::sync::RwLock<crate::mcp::McpServerManager>>> {
+            None
+        }
+
+        async fn list_mcp_tools(&self) -> Vec<crate::mcp::ToolDefinition> {
+            vec![]
+        }
     }
 
     fn create_test_handler() -> EventHandler<MockAiService> {
