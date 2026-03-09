@@ -1,3 +1,39 @@
+//! # Matrix AI 机器人主模块
+//!
+//! 提供机器人的初始化和运行逻辑，是应用程序的入口点。
+//!
+//! ## 核心类型
+//!
+//! - [`Bot`]: 机器人主结构体，封装 Matrix 客户端和事件处理器
+//!
+//! ## 功能特性
+//!
+//! - **自动登录**: 支持会话持久化，重启无需重新登录
+//! - **事件处理**: 自动接受房间邀请，处理消息事件
+//! - **优雅关闭**: 支持 Ctrl+C 信号，安全停止同步循环
+//!
+//! ## 运行流程
+//!
+//! 1. [`Bot::new()`] 创建并初始化 Matrix 客户端
+//! 2. 检查是否存在已保存的会话（SQLite 存储）
+//! 3. 如无会话则执行登录
+//! 4. [`Bot::run()`] 注册事件处理器并启动同步循环
+//! 5. 收到关闭信号后优雅退出
+//!
+//! # Example
+//!
+//! ```no_run
+//! use aether_matrix::bot::Bot;
+//! use aether_matrix::config::Config;
+//!
+//! #[tokio::main]
+//! async fn main() -> anyhow::Result<()> {
+//!     let config = Config::from_env()?;
+//!     let bot = Bot::new(config).await?;
+//!     bot.run().await
+//! }
+//! ```
+
 use anyhow::Result;
 use matrix_sdk::{
     Client, LoopCtrl, config::SyncSettings, ruma::events::room::member::StrippedRoomMemberEvent,

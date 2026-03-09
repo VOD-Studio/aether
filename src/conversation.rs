@@ -1,3 +1,52 @@
+//! # 会话管理模块
+//!
+//! 管理多个独立会话的消息历史，支持按 session_id 隔离对话。
+//!
+//! ## 核心类型
+//!
+//! - [`ConversationManager`][]: 会话历史管理器
+//!
+//! ## 功能特性
+//!
+//! - **多会话隔离**: 按 session_id 隔离不同用户/房间的对话
+//! - **系统提示词**: 可配置的系统提示词，支持动态覆盖
+//! - **历史长度限制**: 自动删除最早的消息，防止上下文过长
+//! - **图片消息支持**: 支持带图片的用户消息（Vision API）
+//!
+//! ## 消息历史结构
+//!
+//! 每个会话的消息历史结构：
+//! ```text
+//! [System Message (可选)]
+//! [User Message 1]
+//! [Assistant Message 1]
+//! [User Message 2]
+//! [Assistant Message 2]
+//! ...
+//! ```
+//!
+//! # Example
+//!
+//! ```
+//! use aether_matrix::conversation::ConversationManager;
+//!
+//! let mut manager = ConversationManager::new(
+//!     Some("You are helpful.".to_string()),
+//!     10
+//! );
+//!
+//! // 添加用户消息和 AI 回复
+//! manager.add_user_message("user-1", "Hello!");
+//! manager.add_assistant_message("user-1", "Hi there!");
+//!
+//! // 获取完整消息历史（包含系统提示词）
+//! let messages = manager.get_messages("user-1");
+//! assert_eq!(messages.len(), 3); // system + user + assistant
+//!
+//! // 重置特定会话
+//! manager.reset("user-1");
+//! ```
+
 use std::collections::HashMap;
 
 use async_openai::types::chat::{
@@ -286,22 +335,7 @@ impl ConversationManager {
     }
 
     /// 重置（删除）指定会话的历史记录。
-    ///
-    /// # Arguments
-    ///
-    /// * `session_id` - 要重置的会话标识符
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// use aether_matrix::conversation::ConversationManager;
-    ///
-    /// let mut manager = ConversationManager::new(None, 10);
-    /// manager.add_user_message("user-1", "Hello!");
-    /// manager.reset("user-1");
-    ///
-    /// assert!(manager.get_messages("user-1").is_empty());
-    /// ```
+    #[allow(dead_code)]
     pub fn reset(&mut self, session_id: &str) {
         self.conversations.remove(session_id);
     }

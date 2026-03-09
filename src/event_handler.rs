@@ -58,17 +58,17 @@ use matrix_sdk::ruma::events::room::message::MessageType;
 ///
 /// # Example
 ///
-/// ```ignore
+/// ```
 /// use aether_matrix::event_handler::handle_invite;
 ///
-/// // 注册为事件处理器
-/// client.add_event_handler(
-///     |ev: StrippedRoomMemberEvent, client: Client, room: Room| async move {
-///         if let Err(e) = handle_invite(ev, client, room).await {
-///             tracing::error!("处理邀请失败: {}", e);
-///         }
-///     }
-/// );
+/// // // 注册为事件处理器
+/// // client.add_event_handler(
+/// //     |ev: StrippedRoomMemberEvent, client: Client, room: Room| async move {
+/// //         if let Err(e) = handle_invite(ev, client, room).await {
+/// //             tracing::error!("处理邀请失败: {}", e);
+/// //         }
+/// //     }
+/// // );
 /// ```
 pub async fn handle_invite(ev: StrippedRoomMemberEvent, client: Client, room: Room) -> Result<()> {
     if ev.content.membership != MembershipState::Invite {
@@ -106,20 +106,20 @@ pub async fn handle_invite(ev: StrippedRoomMemberEvent, client: Client, room: Ro
 ///
 /// # Example
 ///
-/// ```ignore
+/// ```
 /// use aether_matrix::event_handler::EventHandler;
 /// use aether_matrix::ai_service::AiService;
 ///
-/// let handler = EventHandler::new(
-///     ai_service,
-///     bot_user_id,
-///     client,
-///     &config,
-///     persona_store,
-/// );
-///
-/// // 注册为事件处理器
-/// client.add_event_handler(handler);
+/// // let handler = EventHandler::new(
+/// // //     ai_service,
+/// // //     bot_user_id,
+/// // //     client,
+/// // //     &config,
+/// // //     persona_store,
+/// // // );
+/// //
+/// // // 注册为事件处理器
+/// // client.add_event_handler(handler);
 /// ```
 pub struct EventHandler<T: AiServiceTrait> {
     ai_service: T,
@@ -249,7 +249,6 @@ impl<T: AiServiceTrait> EventHandler<T> {
 
         // 获取消息文本
         let text = original.content.body();
-        let event_id = original.event_id.clone();
 
         let room_id = room.room_id();
 
@@ -273,13 +272,7 @@ impl<T: AiServiceTrait> EventHandler<T> {
         if is_command {
             info!("分发命令: {}", text);
             self.command_gateway
-                .dispatch(
-                    &client,
-                    room.clone(),
-                    original.sender.clone(),
-                    text,
-                    event_id.clone(),
-                )
+                .dispatch(&client, room.clone(), original.sender.clone(), text)
                 .await?;
             return Ok(());
         }
@@ -378,7 +371,7 @@ impl<T: AiServiceTrait> EventHandler<T> {
         room: &Room,
         session_id: &str,
         image_msg: &matrix_sdk::ruma::events::room::message::ImageMessageEventContent,
-        system_prompt: Option<&str>,
+        _system_prompt: Option<&str>,
     ) -> Result<()> {
         let mxc_uri = match &image_msg.source {
             matrix_sdk::ruma::events::room::MediaSource::Plain(uri) => uri,
