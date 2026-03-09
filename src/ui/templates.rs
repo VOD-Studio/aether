@@ -9,7 +9,7 @@
 //!   - 零 style= 属性
 
 mod color {
-    pub const TITLE: &str = "#e8eeff";
+    pub const TITLE: &str = "#3164f0ff";
     pub const ACCENT: &str = "#6ea8ff";
     pub const KEY: &str = "#6a7fa8";
     pub const VALUE: &str = "#c8d4f0";
@@ -108,6 +108,34 @@ pub fn error(msg: &str) -> String {
 
 pub fn warning(msg: &str) -> String {
     GlassTemplate::status(Status::Warning, msg)
+}
+
+pub fn info(msg: &str) -> String {
+    format!("<blockquote>{}</blockquote>", bold(&fc(color::ACCENT, msg)))
+}
+
+pub fn leaderboard(title: &str, headers: &[&str], rows: &[Vec<&str>]) -> String {
+    let header_row: String = headers
+        .iter()
+        .map(|h| format!("<th>{}</th>", fc(color::KEY, h)))
+        .collect();
+
+    let data_rows: String = rows
+        .iter()
+        .map(|row| {
+            let cells: String = row
+                .iter()
+                .map(|cell| format!("<td>{}</td>", bold(&fc(color::VALUE, cell))))
+                .collect();
+            format!("<tr>{cells}</tr>")
+        })
+        .collect();
+
+    format!(
+        "<h3>{} {}</h3><blockquote><table><thead><tr>{header_row}</tr></thead><tbody>{data_rows}</tbody></table></blockquote>",
+        fc(color::ACCENT, "🏆"),
+        bold(&fc(color::TITLE, title))
+    )
 }
 
 #[cfg(test)]

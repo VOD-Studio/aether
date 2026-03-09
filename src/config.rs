@@ -188,7 +188,7 @@ pub struct BotConfig {
 
     /// 数据库文件路径。
     ///
-    /// 用于存储 Persona 等持久化数据。
+    /// 用于存储 Persona、Muyu 等持久化数据。
     /// 默认为 `./data/aether.db`。
     #[serde(default = "default_db_path")]
     pub db_path: String,

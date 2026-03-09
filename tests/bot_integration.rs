@@ -151,3 +151,4 @@ mod bot_tests {
         assert!(result.is_err(), "Bot::new should fail with invalid URL");
     }
 }
+}

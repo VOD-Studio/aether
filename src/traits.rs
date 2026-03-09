@@ -102,18 +102,24 @@ impl StreamingState {
 /// - `Arc<Mutex<StreamingState>>`: 共享状态，用于追踪已累积的内容
 /// - `Pin<Box<dyn Stream>>`: 异步流，每次 yield 一个文本片段
 ///
-/// # Usage
+/// # Example
 ///
-/// ```ignore
-/// let (state, mut stream) = service.chat_stream("user-1", "Hello").await?;
+/// ```no_run
+/// use aether_matrix::traits::{AiServiceTrait, StreamingState};
+/// use futures_util::StreamExt;
 ///
-/// while let Some(delta) = stream.next().await {
-///     // delta 是新增的文本片段
-///     println!("Delta: {}", delta?);
+/// async fn example<S: AiServiceTrait>(service: &S) -> anyhow::Result<()> {
+///     let (state, mut stream) = service.chat_stream("user-1", "Hello").await?;
+///
+///     while let Some(delta) = stream.next().await {
+///         // delta 是新增的文本片段
+///         println!("Delta: {}", delta?);
+///     }
+///
+///     // 获取完整内容
+///     let full_content = state.lock().await.content();
+///     Ok(())
 /// }
-///
-/// // 获取完整内容
-/// let full_content = state.lock().await.content();
 /// ```
 pub type ChatStreamResponse = (
     Arc<Mutex<StreamingState>>,
@@ -142,7 +148,7 @@ pub type ChatStreamResponse = (
 ///
 /// # Example
 ///
-/// ```ignore
+/// ```no_run
 /// use aether_matrix::traits::AiServiceTrait;
 ///
 /// async fn handle_message<S: AiServiceTrait>(service: &S, user: &str, msg: &str) {

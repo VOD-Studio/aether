@@ -1,5 +1,6 @@
 //! 功能模块
 
 pub mod admin;
-pub mod persona;
 pub mod mcp;
+pub mod muyu;
+pub mod persona;
