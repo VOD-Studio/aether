@@ -4,7 +4,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 /// 功德记录
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct MeritRecord {
     /// 用户 ID
     pub user_id: String,
@@ -29,24 +29,6 @@ pub struct MeritRecord {
     /// 最后敲击日期（用于判断是否新的一天，控制 merit_today 重置）
     #[allow(dead_code)]
     pub last_hit_date: Option<chrono::NaiveDate>,
-}
-
-impl Default for MeritRecord {
-    fn default() -> Self {
-        Self {
-            user_id: String::new(),
-            room_id: String::new(),
-            merit_total: 0,
-            merit_today: 0,
-            hits_today: 0,
-            last_hit: None,
-            combo: 0,
-            max_combo: 0,
-            critical_count: 0,
-            consecutive_days: 0,
-            last_hit_date: None,
-        }
-    }
 }
 
 /// 称号定义

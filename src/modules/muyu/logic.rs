@@ -49,18 +49,18 @@ impl MuyuLogic {
         let key = format!("{}:{}", user_id, room_id);
 
         // 1. 防刷限流检查
-        if let Some(last_time) = self.last_hit_times.get(&key) {
-            if last_time.elapsed() < Duration::from_millis(COOLDOWN_MS) {
-                return Ok(HitResult {
-                    merit_gained: 0,
-                    merit_total: 0,
-                    new_combo: 0,
-                    is_critical: false,
-                    combo_multiplier: 1.0,
-                    dropped_item: None,
-                    unlocked_titles: Vec::new(),
-                });
-            }
+        if let Some(last_time) = self.last_hit_times.get(&key)
+            && last_time.elapsed() < Duration::from_millis(COOLDOWN_MS)
+        {
+            return Ok(HitResult {
+                merit_gained: 0,
+                merit_total: 0,
+                new_combo: 0,
+                is_critical: false,
+                combo_multiplier: 1.0,
+                dropped_item: None,
+                unlocked_titles: Vec::new(),
+            });
         }
 
         // 更新最后敲击时间

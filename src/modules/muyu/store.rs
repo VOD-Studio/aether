@@ -303,10 +303,8 @@ impl MuyuStore {
                 }
             };
 
-            if should_unlock {
-                if self.unlock_title(&record.user_id, &record.room_id, title.id)? {
-                    unlocked.push(title);
-                }
+            if should_unlock && self.unlock_title(&record.user_id, &record.room_id, title.id)? {
+                unlocked.push(title);
             }
         }
 
