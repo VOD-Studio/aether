@@ -98,8 +98,8 @@ impl Bot {
     pub async fn new(config: Config) -> Result<Self> {
         // 创建 Matrix 客户端
         let mut client_builder = Client::builder()
-            .homeserver_url(&config.matrix_homeserver)
-            .sqlite_store(&config.store_path, None);
+            .homeserver_url(&config.matrix.homeserver)
+            .sqlite_store(&config.matrix.store_path, None);
 
         // 配置代理（如果需要）
         if let Some(proxy_url) = &config.proxy {
@@ -118,12 +118,12 @@ impl Bot {
 
             let mut login_builder = client
                 .matrix_auth()
-                .login_username(&config.matrix_username, &config.matrix_password)
-                .initial_device_display_name(&config.device_display_name);
+                .login_username(&config.matrix.username, &config.matrix.password)
+                .initial_device_display_name(&config.matrix.device_display_name);
 
             // 如果配置了设备ID，使用它以保持设备一致性
             // 避免每次重启都创建新设备，导致设备列表膨胀
-            if let Some(device_id) = &config.matrix_device_id {
+            if let Some(device_id) = &config.matrix.device_id {
                 login_builder = login_builder.device_id(device_id.as_str());
                 info!("使用配置的设备ID: {}", device_id);
             }
@@ -136,11 +136,11 @@ impl Bot {
             .ok_or_else(|| anyhow::anyhow!("登录后无法获取用户ID"))?;
         info!("登录成功: {}", user_id);
 
-        // 初始化数据库和 PersonaStore
-        // 失败时降级运行，仅禁用 Persona 功能，不影响核心 AI 对话
-        let (persona_store, muyu_store) = match Database::new(&config.db_path) {
+        // 初始化数据库和 PersonaStore、MuyuStore
+        // 失败时降级运行，仅禁用 Persona 和 Muyu 功能，不影响核心 AI 对话
+        let (persona_store, muyu_store) = match Database::new(&config.bot.db_path) {
             Ok(db) => {
-                info!("数据库初始化成功: {}", config.db_path);
+                info!("数据库初始化成功: {}", config.bot.db_path);
                 let persona_store = PersonaStore::new(db.conn().clone());
                 if let Err(e) = persona_store.init_builtin_personas() {
                     tracing::warn!("初始化内置人设失败: {}", e);
@@ -154,7 +154,7 @@ impl Bot {
             }
         };
 
-        let ai_service = AiService::new(&config);
+        let ai_service = AiService::new(&config).await;
 
         let handler = EventHandler::new(
             ai_service,

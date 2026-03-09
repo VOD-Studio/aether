@@ -166,7 +166,7 @@ impl<T: AiServiceTrait> EventHandler<T> {
         muyu_store: Option<MuyuStore>,
     ) -> Self {
         let mut command_gateway =
-            CommandGateway::new(config.command_prefix.clone(), config.bot_owners.clone());
+            CommandGateway::new(config.bot.command_prefix.clone(), config.bot.owners.clone());
 
         command_gateway.register(Arc::new(BotInfoHandler));
         command_gateway.register(Arc::new(BotLeaveHandler));
@@ -174,6 +174,12 @@ impl<T: AiServiceTrait> EventHandler<T> {
 
         if let Some(ref store) = persona_store {
             command_gateway.register(Arc::new(PersonaHandler::new(store.clone())));
+        }
+        
+        // 注册MCP管理命令
+        if config.mcp.enabled {
+            // TODO: 需要在AiService中添加获取mcp_server_manager的方法
+            // command_gateway.register(Arc::new(McpHandler::new(ai_service.mcp_server_manager())));
         }
 
         if let Some(ref store) = muyu_store {
@@ -188,14 +194,14 @@ impl<T: AiServiceTrait> EventHandler<T> {
             ai_service,
             client,
             bot_user_id,
-            command_prefix: config.command_prefix.clone(),
+            command_prefix: config.bot.command_prefix.clone(),
             command_gateway,
             persona_store,
-            streaming_enabled: config.streaming_enabled,
-            streaming_min_interval: Duration::from_millis(config.streaming_min_interval_ms),
-            streaming_min_chars: config.streaming_min_chars,
-            vision_enabled: config.vision_enabled,
-            vision_max_image_size: config.vision_max_image_size,
+            streaming_enabled: config.streaming.enabled,
+            streaming_min_interval: Duration::from_millis(config.streaming.min_interval_ms),
+            streaming_min_chars: config.streaming.min_chars,
+            vision_enabled: config.vision.enabled,
+            vision_max_image_size: config.vision.max_image_size,
         }
     }
 
@@ -512,7 +518,7 @@ impl<T: AiServiceTrait> EventHandler<T> {
                             let response = room
                                 .send(RoomMessageEventContent::text_plain(&content))
                                 .await?;
-                            event_id = Some(response.event_id);
+                            event_id = Some(response.response.event_id);
                         }
 
                         // 重置计数器
@@ -673,28 +679,41 @@ mod tests {
     fn create_test_handler() -> EventHandler<MockAiService> {
         use matrix_sdk::Client;
         let config = Config {
-            matrix_homeserver: "https://matrix.org".to_string(),
-            matrix_username: "test".to_string(),
-            matrix_password: "test".to_string(),
-            matrix_device_id: None,
-            device_display_name: "Test Bot".to_string(),
-            store_path: "./store".to_string(),
-            openai_api_key: "test".to_string(),
-            openai_base_url: "https://api.openai.com/v1".to_string(),
-            openai_model: "gpt-4o-mini".to_string(),
-            system_prompt: None,
-            command_prefix: "!".to_string(),
-            max_history: 10,
-            bot_owners: Vec::new(),
-            db_path: "./store/aether.db".to_string(),
-            streaming_enabled: false,
-            streaming_min_interval_ms: 500,
-            streaming_min_chars: 10,
-            log_level: "info".to_string(),
-            vision_enabled: true,
-            vision_model: None,
-            vision_max_image_size: 1024,
+            matrix: crate::config::MatrixConfig {
+                homeserver: "https://matrix.org".to_string(),
+                username: "test".to_string(),
+                password: "test".to_string(),
+                device_id: None,
+                device_display_name: "Test Bot".to_string(),
+                store_path: "./store".to_string(),
+            },
+            openai: crate::config::OpenAiConfig {
+                api_key: "test".to_string(),
+                base_url: "https://api.openai.com/v1".to_string(),
+                model: "gpt-4o-mini".to_string(),
+                system_prompt: None,
+            },
+            bot: crate::config::BotConfig {
+                command_prefix: "!".to_string(),
+                max_history: 10,
+                owners: Vec::new(),
+                db_path: "./data/aether.db".to_string(),
+            },
+            streaming: crate::config::StreamingConfig {
+                enabled: false,
+                min_interval_ms: 500,
+                min_chars: 10,
+            },
+            vision: crate::config::VisionConfig {
+                enabled: true,
+                model: None,
+                max_image_size: 1024,
+            },
+            log: crate::config::LogConfig {
+                level: "info".to_string(),
+            },
             proxy: None,
+            mcp: crate::mcp::McpConfig::default(),
         };
         let bot_user_id = user_id!("@bot:matrix.org").to_owned();
         let rt = tokio::runtime::Runtime::new().unwrap();

@@ -55,6 +55,7 @@ use futures_util::{Stream, StreamExt};
 use crate::config::Config;
 use crate::conversation::ConversationManager;
 use crate::traits::{AiServiceTrait, ChatStreamResponse, StreamingState};
+use crate::mcp::McpServerManager;
 
 /// OpenAI API 封装服务。
 ///
@@ -102,6 +103,12 @@ struct AiServiceInner {
     vision_model: String,
     /// 会话管理器（使用 RwLock 支持并发读写）
     conversation: Arc<RwLock<ConversationManager>>,
+    /// MCP 工具注册表（可选）
+    #[allow(dead_code)]
+    mcp_registry: Option<Arc<RwLock<crate::mcp::ToolRegistry>>>,
+    /// MCP 服务器管理器（可选）
+    #[allow(dead_code)]
+    mcp_server_manager: Option<Arc<RwLock<McpServerManager>>>,
 }
 
 impl AiService {
@@ -110,23 +117,50 @@ impl AiService {
     /// # Arguments
     ///
     /// * `config` - 机器人配置，包含 API 密钥、模型等设置
-    pub fn new(config: &Config) -> Self {
+    pub async fn new(config: &Config) -> Self {
         let openai_config = OpenAIConfig::new()
-            .with_api_key(&config.openai_api_key)
-            .with_api_base(&config.openai_base_url);
+            .with_api_key(&config.openai.api_key)
+            .with_api_base(&config.openai.base_url);
+        
+        let mcp_registry = if config.mcp.enabled {
+            Some(Arc::new(RwLock::new(crate::mcp::ToolRegistry::new(
+                &config.mcp.builtin_tools,
+            ))))
+        } else {
+            None
+        };
+        
+        let mcp_server_manager = if config.mcp.enabled && !config.mcp.external_servers.is_empty() {
+            if let Some(ref registry) = mcp_registry {
+                match McpServerManager::new(&config.mcp, registry.clone()).await {
+                    Ok(manager) => Some(Arc::new(RwLock::new(manager))),
+                    Err(e) => {
+                        tracing::error!("Failed to initialize MCP server manager: {}", e);
+                        None
+                    }
+                }
+            } else {
+                None
+            }
+        } else {
+            None
+        };
 
         Self {
             inner: Arc::new(AiServiceInner {
                 client: Client::with_config(openai_config),
-                model: config.openai_model.clone(),
+                model: config.openai.model.clone(),
                 vision_model: config
-                    .vision_model
+                    .vision
+                    .model
                     .clone()
-                    .unwrap_or_else(|| config.openai_model.clone()),
+                    .unwrap_or_else(|| config.openai.model.clone()),
                 conversation: Arc::new(RwLock::new(ConversationManager::new(
-                    config.system_prompt.clone(),
-                    config.max_history,
+                    config.openai.system_prompt.clone(),
+                    config.bot.max_history,
                 ))),
+                mcp_registry,
+                mcp_server_manager,
             }),
         }
     }
@@ -169,6 +203,160 @@ impl AiService {
         }
 
         Ok(content)
+    }
+
+    /// 执行带工具调用的聊天（支持 MCP）。
+    ///
+    /// 如果 MCP 启用且有可用工具，AI 可以自动调用工具来完成任务。
+    /// 工具调用会自动循环，直到 AI 返回最终文本回复。
+    #[allow(dead_code)]
+    pub async fn chat_with_tools(
+        &self,
+        session_id: &str,
+        prompt: &str,
+        system_prompt: Option<&str>,
+    ) -> Result<String> {
+        // 添加用户消息（如果有）
+        if !prompt.is_empty() {
+            let mut conv = self.inner.conversation.write().await;
+            conv.add_user_message(session_id, prompt);
+        }
+
+        // 获取所有可用工具
+        let tools = if let Some(ref mcp_registry) = self.inner.mcp_registry {
+            let registry = mcp_registry.read().await;
+            if registry.is_empty() {
+                None
+            } else {
+                Some(registry.to_openai_tools())
+            }
+        } else {
+            None
+        };
+
+        // 如果没有工具，使用普通聊天
+        if tools.is_none() {
+            return self.chat_with_system(session_id, prompt, system_prompt).await;
+        }
+
+        let tools = tools.unwrap();
+
+        // 获取消息历史
+        let messages = {
+            let conv = self.inner.conversation.read().await;
+            match system_prompt {
+                Some(sp) => conv.get_messages_with_system(session_id, sp),
+                None => conv.get_messages(session_id),
+            }
+        };
+
+        // 构建带工具的请求
+        let request = CreateChatCompletionRequest {
+            model: self.inner.model.clone(),
+            messages,
+            tools: Some(tools),
+            tool_choice: Some(async_openai::types::chat::ChatCompletionToolChoiceOption::Mode(
+                async_openai::types::chat::ToolChoiceOptions::Auto,
+            )),
+            ..Default::default()
+        };
+
+        // 调用 OpenAI API
+        let response = self.inner.client.chat().create(request).await?;
+        let message = &response.choices[0].message;
+
+        // 检查是否有工具调用
+        if let Some(ref tool_calls) = message.tool_calls {
+            tracing::info!("AI 请求调用 {} 个工具", tool_calls.len());
+
+            // 记录 assistant 的工具调用消息
+            {
+                let mut conv = self.inner.conversation.write().await;
+                // 需要先记录 assistant 消息（包含 tool_calls）
+                for tool_call_enum in tool_calls {
+                    // 只处理 Function 类型的工具调用
+                    if let async_openai::types::chat::ChatCompletionMessageToolCalls::Function(tool_call) = tool_call_enum {
+                        // 解析参数
+                        let args: serde_json::Value = serde_json::from_str(&tool_call.function.arguments)
+                            .unwrap_or(serde_json::Value::Null);
+                        
+                        conv.add_tool_call_message(
+                            session_id,
+                            tool_call.id.clone(),
+                            tool_call.function.name.clone(),
+                            args,
+                        );
+                    }
+                }
+            }
+
+            // 执行每个工具调用
+            for tool_call_enum in tool_calls {
+                // 只处理 Function 类型的工具调用
+                if let async_openai::types::chat::ChatCompletionMessageToolCalls::Function(tool_call) = tool_call_enum {
+                    tracing::info!(
+                        "执行工具: {} (id: {})",
+                        tool_call.function.name,
+                        tool_call.id
+                    );
+
+                    // 解析参数
+                    let args: serde_json::Value = serde_json::from_str(&tool_call.function.arguments)
+                        .unwrap_or(serde_json::Value::Null);
+
+                    // 执行工具
+                    let result = self.execute_tool(&tool_call.function.name, args).await?;
+
+                    // 记录工具结果
+                    {
+                        let mut conv = self.inner.conversation.write().await;
+                        conv.add_tool_result_message(session_id, tool_call.id.clone(), result);
+                    }
+                }
+            }
+
+            // 递归调用，让 AI 处理工具结果
+            tracing::debug!("工具执行完成，继续让 AI 处理结果");
+            return Box::pin(self.chat_with_tools(session_id, "", system_prompt)).await;
+        }
+
+        // 没有工具调用，返回文本回复
+        let content = message.content.clone().unwrap_or_default();
+
+        // 保存 AI 回复到历史
+        {
+            let mut conv = self.inner.conversation.write().await;
+            conv.add_assistant_message(session_id, &content);
+        }
+
+        Ok(content)
+    }
+
+    /// 执行工具调用。
+    ///
+    /// # Arguments
+    ///
+    /// * `tool_name` - 工具名称
+    /// * `arguments` - 工具参数
+    ///
+    /// # Returns
+    ///
+    /// 返回工具执行结果（JSON 格式）
+    async fn execute_tool(
+        &self,
+        tool_name: &str,
+        arguments: serde_json::Value,
+    ) -> Result<serde_json::Value> {
+        // 获取 MCP 注册表
+        let mcp_registry = self.inner.mcp_registry.as_ref()
+            .ok_or_else(|| anyhow::anyhow!("MCP not enabled"))?;
+
+        // 执行工具
+        let registry = mcp_registry.read().await;
+        let result = registry.execute_tool(tool_name, arguments).await?;
+
+        // 将 ToolResult 转换为 JSON
+        Ok(serde_json::to_value(result)?)
     }
 
     /// 执行带自定义系统提示词的聊天。
@@ -241,6 +429,12 @@ impl AiService {
     pub async fn reset_conversation(&self, session_id: &str) {
         let mut conv = self.inner.conversation.write().await;
         conv.reset(session_id);
+    }
+
+    /// 获取 MCP 工具注册表（如果启用）
+    #[allow(dead_code)]
+    pub fn inner_mcp_registry(&self) -> Option<Arc<RwLock<crate::mcp::ToolRegistry>>> {
+        self.inner.mcp_registry.clone()
     }
 
     /// 执行流式聊天。

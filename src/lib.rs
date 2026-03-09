@@ -1,3 +1,5 @@
+#![recursion_limit = "1024"]
+
 //! # Matrix AI Bot
 //!
 //! 一个基于 Matrix 协议的 AI 助手机器人，使用 OpenAI 兼容 API 提供聊天功能。
@@ -26,6 +28,7 @@ pub mod command;
 pub mod config;
 pub mod conversation;
 pub mod event_handler;
+pub mod mcp;
 pub mod media;
 pub mod modules;
 pub mod store;
