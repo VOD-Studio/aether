@@ -35,6 +35,7 @@ use crate::config::Config;
 use crate::media::download_image_as_base64;
 use crate::modules::admin::{BotInfoHandler, BotLeaveHandler, BotPingHandler};
 use crate::modules::persona::PersonaHandler;
+use crate::modules::mcp::McpHandler;
 use crate::store::PersonaStore;
 use crate::traits::AiServiceTrait;
 use matrix_sdk::ruma::events::room::message::MessageType;
@@ -168,6 +169,12 @@ impl<T: AiServiceTrait> EventHandler<T> {
 
         if let Some(ref store) = persona_store {
             command_gateway.register(Arc::new(PersonaHandler::new(store.clone())));
+        }
+        
+        // 注册MCP管理命令
+        if config.mcp.enabled {
+            // TODO: 需要在AiService中添加获取mcp_server_manager的方法
+            // command_gateway.register(Arc::new(McpHandler::new(ai_service.mcp_server_manager())));
         }
 
         Self {

@@ -55,6 +55,7 @@ use futures_util::{Stream, StreamExt};
 use crate::config::Config;
 use crate::conversation::ConversationManager;
 use crate::traits::{AiServiceTrait, ChatStreamResponse, StreamingState};
+use crate::mcp::McpServerManager;
 
 /// OpenAI API 封装服务。
 ///
@@ -102,8 +103,10 @@ struct AiServiceInner {
     vision_model: String,
     /// 会话管理器（使用 RwLock 支持并发读写）
     conversation: Arc<RwLock<ConversationManager>>,
-    /// MCP 工具管理器（可选）
+    /// MCP 工具注册表（可选）
     mcp_registry: Option<Arc<RwLock<crate::mcp::ToolRegistry>>>,
+    /// MCP 服务器管理器（可选）
+    mcp_server_manager: Option<Arc<RwLock<McpServerManager>>>,
 }
 
 impl AiService {
@@ -112,30 +115,50 @@ impl AiService {
     /// # Arguments
     ///
     /// * `config` - 机器人配置，包含 API 密钥、模型等设置
-    pub fn new(config: &Config) -> Self {
+    pub async fn new(config: &Config) -> Self {
         let openai_config = OpenAIConfig::new()
             .with_api_key(&config.openai.api_key)
             .with_api_base(&config.openai.base_url);
+        
+        let mcp_registry = if config.mcp.enabled {
+            Some(Arc::new(RwLock::new(crate::mcp::ToolRegistry::new(
+                &config.mcp.builtin_tools,
+            ))))
+        } else {
+            None
+        };
+        
+        let mcp_server_manager = if config.mcp.enabled && !config.mcp.external_servers.is_empty() {
+            if let Some(ref registry) = mcp_registry {
+                match McpServerManager::new(&config.mcp, registry.clone()).await {
+                    Ok(manager) => Some(Arc::new(RwLock::new(manager))),
+                    Err(e) => {
+                        tracing::error!("Failed to initialize MCP server manager: {}", e);
+                        None
+                    }
+                }
+            } else {
+                None
+            }
+        } else {
+            None
+        };
 
         Self {
             inner: Arc::new(AiServiceInner {
                 client: Client::with_config(openai_config),
                 model: config.openai.model.clone(),
                 vision_model: config
-                    .vision.model
+                    .vision
+                    .model
                     .clone()
                     .unwrap_or_else(|| config.openai.model.clone()),
                 conversation: Arc::new(RwLock::new(ConversationManager::new(
                     config.openai.system_prompt.clone(),
                     config.bot.max_history,
                 ))),
-                mcp_registry: if config.mcp.enabled {
-                    Some(Arc::new(RwLock::new(crate::mcp::ToolRegistry::new(
-                        &config.mcp.builtin_tools,
-                    ))))
-                } else {
-                    None
-                },
+                mcp_registry,
+                mcp_server_manager,
             }),
         }
     }
@@ -413,6 +436,11 @@ impl AiService {
     pub async fn reset_conversation(&self, session_id: &str) {
         let mut conv = self.inner.conversation.write().await;
         conv.reset(session_id);
+    }
+
+    /// 获取 MCP 工具注册表（如果启用）
+    pub fn inner_mcp_registry(&self) -> Option<Arc<RwLock<crate::mcp::ToolRegistry>>> {
+        self.inner.mcp_registry.clone()
     }
 
     /// 执行流式聊天。

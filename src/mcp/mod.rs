@@ -15,11 +15,14 @@
 //! - [`config`][]: MCP 配置管理
 //! - [`builtin`][]: 内置工具实现
 //! - [`transport`][]: MCP 传输层（Stdio/HTTP/SSE）
+//! - [`server_manager`][]: MCP 服务器管理器
 
 pub mod builtin;
 pub mod config;
 pub mod tool_registry;
 pub mod transport;
+pub mod server_manager;
 
 pub use config::{McpConfig, BuiltinToolsConfig, WebFetchConfig, ExternalServerConfig, TransportType};
 pub use tool_registry::{Tool, ToolDefinition, ToolResult, ToolSource, ToolRegistry};
+pub use server_manager::{McpServerManager, ServerStatus, McpServer};

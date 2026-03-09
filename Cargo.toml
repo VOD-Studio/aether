@@ -24,6 +24,7 @@ reqwest = { version = "0.13", default-features = false, features = [
     "rustls",
     "rustls-native-certs",
     "http2",
+    "json",
 ] }
 mime = "0.3"
 rusqlite = { version = "0.37", features = ["bundled"] }
@@ -33,6 +34,11 @@ schemars = { version = "1.2", features = ["derive"] }
 scraper = "0.25"
 regex = "1"
 url = "2.5"
+rmcp = { version = "1.1.0", features = [
+  "client",
+  "transport-child-process",
+  "schemars"
+] }
 
 [dev-dependencies]
 tokio-test = "0.4"

@@ -152,7 +152,7 @@ impl Bot {
             }
         };
 
-        let ai_service = AiService::new(&config);
+        let ai_service = AiService::new(&config).await;
 
         let handler = EventHandler::new(
             ai_service,
