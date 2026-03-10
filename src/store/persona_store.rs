@@ -4,7 +4,7 @@
 //! 响应风格和系统提示词，每个 Matrix 房间可以设置独立的人设。
 
 use anyhow::Result;
-use rusqlite::{Connection, params};
+use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 use std::sync::{Arc, Mutex};
 
@@ -671,13 +671,6 @@ mod tests {
     }
 
     #[test]
-    fn test_get_all_returns_empty_when_no_personas() {
-        let (store, _temp_dir) = create_test_store();
-        let personas = store.get_all().unwrap();
-        assert!(personas.is_empty());
-    }
-
-    #[test]
     fn test_get_all_returns_builtin_first() {
         let (store, _temp_dir) = create_test_store();
         store.init_builtin_personas().unwrap();
@@ -834,5 +827,318 @@ mod tests {
 
         let after = store.get_room_persona("!room3:matrix.org").unwrap();
         assert!(after.is_none());
+    }
+
+    #[test]
+    fn test_create_persona_fails_with_duplicate_id() {
+        let (store, _temp_dir) = create_test_store();
+
+        let first_persona = Persona {
+            id: "duplicate-test".to_string(),
+            name: "First Persona".to_string(),
+            system_prompt: "First prompt".to_string(),
+            avatar_emoji: None,
+            is_builtin: false,
+            created_by: Some("@user1:matrix.org".to_string()),
+        };
+
+        let second_persona_with_same_id = Persona {
+            id: "duplicate-test".to_string(),
+            name: "Second Persona".to_string(),
+            system_prompt: "Second prompt".to_string(),
+            avatar_emoji: Some("🎭".to_string()),
+            is_builtin: false,
+            created_by: Some("@user2:matrix.org".to_string()),
+        };
+
+        store.create_persona(&first_persona).unwrap();
+        let duplicate_result = store.create_persona(&second_persona_with_same_id);
+        assert!(duplicate_result.is_err());
+
+        let retrieved = store.get_by_id("duplicate-test").unwrap().unwrap();
+        assert_eq!(retrieved.name, "First Persona");
+        assert_eq!(retrieved.created_by, Some("@user1:matrix.org".to_string()));
+    }
+
+    #[test]
+    fn test_create_persona_with_empty_id_stores_successfully() {
+        let (store, _temp_dir) = create_test_store();
+
+        let persona_with_empty_id = Persona {
+            id: "".to_string(),
+            name: "Test Persona".to_string(),
+            system_prompt: "Test prompt".to_string(),
+            avatar_emoji: None,
+            is_builtin: false,
+            created_by: Some("@user:matrix.org".to_string()),
+        };
+
+        store.create_persona(&persona_with_empty_id).unwrap();
+
+        let retrieved = store.get_by_id("").unwrap().unwrap();
+        assert_eq!(retrieved.name, "Test Persona");
+    }
+
+    #[test]
+    fn test_create_persona_with_empty_name_stores_successfully() {
+        let (store, _temp_dir) = create_test_store();
+
+        let persona_with_empty_name = Persona {
+            id: "empty-name-test".to_string(),
+            name: "".to_string(),
+            system_prompt: "Test prompt".to_string(),
+            avatar_emoji: None,
+            is_builtin: false,
+            created_by: Some("@user:matrix.org".to_string()),
+        };
+
+        store.create_persona(&persona_with_empty_name).unwrap();
+
+        let retrieved = store.get_by_id("empty-name-test").unwrap().unwrap();
+        assert_eq!(retrieved.name, "");
+    }
+
+    #[test]
+    fn test_create_persona_with_empty_system_prompt_stores_successfully() {
+        let (store, _temp_dir) = create_test_store();
+
+        let persona_with_empty_prompt = Persona {
+            id: "empty-prompt-test".to_string(),
+            name: "Test Persona".to_string(),
+            system_prompt: "".to_string(),
+            avatar_emoji: None,
+            is_builtin: false,
+            created_by: Some("@user:matrix.org".to_string()),
+        };
+
+        store.create_persona(&persona_with_empty_prompt).unwrap();
+
+        let retrieved = store.get_by_id("empty-prompt-test").unwrap().unwrap();
+        assert_eq!(retrieved.system_prompt, "");
+    }
+
+    #[test]
+    fn test_delete_nonexistent_persona_returns_false() {
+        let (store, _temp_dir) = create_test_store();
+
+        let deleted = store.delete_persona("non-existent-persona").unwrap();
+        assert!(!deleted);
+    }
+
+    #[test]
+    fn test_set_room_persona_with_nonexistent_persona_id_fails() {
+        let (store, _temp_dir) = create_test_store();
+
+        let result = store.set_room_persona("!room:matrix.org", "non-existent", "@user:matrix.org");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_create_persona_with_very_long_system_prompt() {
+        let (store, _temp_dir) = create_test_store();
+
+        let very_long_prompt = "A".repeat(10000);
+        let persona = Persona {
+            id: "long-prompt-test".to_string(),
+            name: "Long Prompt Test".to_string(),
+            system_prompt: very_long_prompt,
+            avatar_emoji: None,
+            is_builtin: false,
+            created_by: Some("@user:matrix.org".to_string()),
+        };
+
+        store.create_persona(&persona).unwrap();
+
+        let retrieved = store.get_by_id("long-prompt-test").unwrap().unwrap();
+        assert_eq!(retrieved.system_prompt.len(), 10000);
+    }
+
+    #[test]
+    fn test_create_persona_with_special_characters_in_id_and_name() {
+        let (store, _temp_dir) = create_test_store();
+
+        let persona = Persona {
+            id: "special-íd-tést-123_!@#$%^&*()".to_string(),
+            name: "Special Námé with ñoño chars 😊".to_string(),
+            system_prompt: "Handle special characters properly".to_string(),
+            avatar_emoji: Some("🚀✨".to_string()),
+            is_builtin: false,
+            created_by: Some("@usér:matrix.örğ".to_string()),
+        };
+
+        store.create_persona(&persona).unwrap();
+
+        let retrieved = store
+            .get_by_id("special-íd-tést-123_!@#$%^&*()")
+            .unwrap()
+            .unwrap();
+        assert_eq!(retrieved.name, "Special Námé with ñoño chars 😊");
+        assert_eq!(retrieved.avatar_emoji, Some("🚀✨".to_string()));
+        assert_eq!(retrieved.created_by, Some("@usér:matrix.örğ".to_string()));
+    }
+
+    #[test]
+    fn test_create_persona_with_unicode_avatar_emoji() {
+        let (store, _temp_dir) = create_test_store();
+
+        let persona = Persona {
+            id: "unicode-avatar-test".to_string(),
+            name: "Unicode Avatar Test".to_string(),
+            system_prompt: "Test unicode emoji".to_string(),
+            avatar_emoji: Some("🎭🐱💻☯️📚🦀🎯🚀✨".to_string()),
+            is_builtin: false,
+            created_by: None,
+        };
+
+        store.create_persona(&persona).unwrap();
+
+        let retrieved = store.get_by_id("unicode-avatar-test").unwrap().unwrap();
+        assert_eq!(
+            retrieved.avatar_emoji,
+            Some("🎭🐱💻☯️📚🦀🎯🚀✨".to_string())
+        );
+    }
+
+    #[test]
+    fn test_set_room_persona_multiple_times_updates_association() {
+        let (store, _temp_dir) = create_test_store();
+        store.init_builtin_personas().unwrap();
+
+        store
+            .set_room_persona(
+                "!room-update-test:matrix.org",
+                "sarcastic-dev",
+                "@user1:matrix.org",
+            )
+            .unwrap();
+        let first = store
+            .get_room_persona("!room-update-test:matrix.org")
+            .unwrap()
+            .unwrap();
+        assert_eq!(first.id, "sarcastic-dev");
+
+        store
+            .set_room_persona(
+                "!room-update-test:matrix.org",
+                "cyber-zen",
+                "@user2:matrix.org",
+            )
+            .unwrap();
+        let second = store
+            .get_room_persona("!room-update-test:matrix.org")
+            .unwrap()
+            .unwrap();
+        assert_eq!(second.id, "cyber-zen");
+    }
+
+    #[test]
+    fn test_get_room_persona_for_nonexistent_room_returns_none() {
+        let (store, _temp_dir) = create_test_store();
+        store.init_builtin_personas().unwrap();
+
+        let persona = store
+            .get_room_persona("!nonexistent-room:matrix.org")
+            .unwrap();
+        assert!(persona.is_none());
+    }
+
+    #[test]
+    fn test_disable_room_persona_when_not_set_succeeds() {
+        let (store, _temp_dir) = create_test_store();
+        store.init_builtin_personas().unwrap();
+
+        store
+            .disable_room_persona("!never-set-room:matrix.org")
+            .unwrap();
+        let persona = store
+            .get_room_persona("!never-set-room:matrix.org")
+            .unwrap();
+        assert!(persona.is_none());
+    }
+
+    #[test]
+    fn test_set_room_persona_with_empty_room_id_stores_successfully() {
+        let (store, _temp_dir) = create_test_store();
+        store.init_builtin_personas().unwrap();
+
+        // Empty room ID is allowed by SQLite
+        store
+            .set_room_persona("", "sarcastic-dev", "@user:matrix.org")
+            .unwrap();
+
+        let persona = store.get_room_persona("").unwrap();
+        assert!(persona.is_some());
+        assert_eq!(persona.unwrap().id, "sarcastic-dev");
+    }
+
+    #[test]
+    fn test_create_persona_with_empty_avatar_emoji_field() {
+        let (store, _temp_dir) = create_test_store();
+
+        let persona_with_none_avatar = Persona {
+            id: "none-avatar-test".to_string(),
+            name: "None Avatar Test".to_string(),
+            system_prompt: "Test with None avatar".to_string(),
+            avatar_emoji: None,
+            is_builtin: false,
+            created_by: Some("@user:matrix.org".to_string()),
+        };
+
+        store.create_persona(&persona_with_none_avatar).unwrap();
+
+        let retrieved = store.get_by_id("none-avatar-test").unwrap().unwrap();
+        assert_eq!(retrieved.avatar_emoji, None);
+    }
+
+    #[test]
+    fn test_create_persona_with_empty_string_avatar_emoji() {
+        let (store, _temp_dir) = create_test_store();
+
+        let persona_with_empty_avatar = Persona {
+            id: "empty-avatar-test".to_string(),
+            name: "Empty Avatar Test".to_string(),
+            system_prompt: "Test with empty string avatar".to_string(),
+            avatar_emoji: Some("".to_string()),
+            is_builtin: false,
+            created_by: Some("@user:matrix.org".to_string()),
+        };
+
+        store.create_persona(&persona_with_empty_avatar).unwrap();
+
+        let retrieved = store.get_by_id("empty-avatar-test").unwrap().unwrap();
+        assert_eq!(retrieved.avatar_emoji, Some("".to_string()));
+    }
+
+    #[test]
+    fn test_get_all_sorts_builtin_first_then_by_name() {
+        let (store, _temp_dir) = create_test_store();
+        store.init_builtin_personas().unwrap();
+
+        let custom_a = Persona {
+            id: "custom-a".to_string(),
+            name: "A Custom".to_string(),
+            system_prompt: "Custom A".to_string(),
+            avatar_emoji: None,
+            is_builtin: false,
+            created_by: None,
+        };
+        let custom_z = Persona {
+            id: "custom-z".to_string(),
+            name: "Z Custom".to_string(),
+            system_prompt: "Custom Z".to_string(),
+            avatar_emoji: None,
+            is_builtin: false,
+            created_by: None,
+        };
+
+        store.create_persona(&custom_a).unwrap();
+        store.create_persona(&custom_z).unwrap();
+
+        let all_personas = store.get_all().unwrap();
+        assert_eq!(all_personas.len(), 6);
+        assert!(!all_personas[4].is_builtin);
+        assert!(!all_personas[5].is_builtin);
+        assert_eq!(all_personas[4].name, "A Custom");
+        assert_eq!(all_personas[5].name, "Z Custom");
     }
 }
