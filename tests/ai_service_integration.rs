@@ -27,17 +27,19 @@ mock! {
             std::sync::Arc<tokio::sync::Mutex<aether_matrix::traits::StreamingState>>,
             std::pin::Pin<Box<dyn futures_util::Stream<Item = anyhow::Result<String>> + Send>>,
         )>;
-        async fn chat_stream_with_system<'a>(&self, session_id: &str, prompt: &str, system_prompt: Option<&'a str>) -> anyhow::Result<(
+async fn chat_stream_with_system<'a>(&self, session_id: &str, prompt: &str, system_prompt: Option<&'a str>) -> anyhow::Result<(
             std::sync::Arc<tokio::sync::Mutex<aether_matrix::traits::StreamingState>>,
             std::pin::Pin<Box<dyn futures_util::Stream<Item = anyhow::Result<String>> + Send>>,
         )>;
         async fn chat_with_tools<'a>(&self, session_id: &str, prompt: &str, system_prompt: Option<&'a str>) -> anyhow::Result<String>;
         fn mcp_server_manager(&self) -> Option<std::sync::Arc<tokio::sync::RwLock<aether_matrix::mcp::McpServerManager>>>;
-        async fn list_mcp_tools(&self) -> Vec<aether_matrix::mcp::ToolDefinition>;
         fn inner_mcp_registry(&self) -> Option<std::sync::Arc<tokio::sync::RwLock<aether_matrix::mcp::ToolRegistry>>>;
+        async fn list_mcp_tools(&self) -> Vec<aether_matrix::mcp::ToolDefinition>;
         async fn has_tools(&self) -> bool;
     }
 }
+
+// ============================================================================
 
 // ============================================================================
 // 基础聊天功能测试

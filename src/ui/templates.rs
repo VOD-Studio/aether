@@ -11,6 +11,7 @@
 //! - **代码高亮**: `<code>` 等宽字体 + 背景色
 //! - **彩色文本**: `<font color>` 实现状态色（成功/错误/警告）
 //! - **零 style 属性**: 避免客户端过滤，确保最大兼容性
+//! - **消息发送**: `send_html()` 统一发送 HTML 消息到 Matrix 房间
 //!
 //! ## 核心设计原则
 //!
@@ -21,7 +22,7 @@
 //! ## 使用示例
 //!
 //! ```
-//! use aether_matrix::ui::templates::{info_card, help_menu, success, error};
+//! use aether_matrix::ui::templates::{info_card, help_menu, success, error, send_html};
 //!
 //! // 信息卡片
 //! let card = info_card("Bot 信息", &[
@@ -38,6 +39,9 @@
 //! // 状态消息
 //! let ok = success("操作成功！");
 //! let err = error("发生错误");
+//!
+//! // 发送消息到房间（异步）
+//! // send_html(&room, &html).await?;
 //! ```
 //!
 //! ## 渲染效果
@@ -49,7 +53,9 @@
 //! | [`success`] | 成功状态 | 绿色 ✓ 图标 |
 //! | [`error`] | 错误状态 | 红色 ✕ 图标 |
 //! | [`warning`] | 警告状态 | 黄色 ⚠ 图标 |
+//! | [`info`] | 信息状态 | 蓝色 ℹ 图标 |
 //! | [`leaderboard`] | 排行榜 | 表头 + 数据行 |
+//! | [`send_html`] | 消息发送 | HTML → Matrix 房间 |
 
 /// 预定义颜色系统。
 ///
@@ -445,7 +451,7 @@ pub fn warning(msg: &str) -> String {
 
 /// 生成信息状态消息。
 ///
-/// 显示蓝色强调色，用于一般信息提示（非状态性消息）。
+/// 显示蓝色 ℹ 图标，用于一般信息提示（非状态性消息）。
 ///
 /// # Arguments
 ///
@@ -455,12 +461,20 @@ pub fn warning(msg: &str) -> String {
 ///
 /// 返回格式化的 HTML 字符串。
 ///
-/// # Note
+/// # Example
 ///
-/// 此函数标记为 `#[allow(dead_code)]`，目前未使用，但保留供未来扩展。
-#[allow(dead_code)]
+/// ```
+/// use aether_matrix::ui::templates::info;
+///
+/// let msg = info("这是一条提示信息");
+/// assert!(msg.contains("ℹ"));
+/// assert!(msg.contains("<blockquote>"));
+/// ```
 pub fn info(msg: &str) -> String {
-    format!("<blockquote>{}</blockquote>", bold(&fc(color::ACCENT, msg)))
+    format!(
+        "<blockquote><b>{}</b></blockquote>",
+        bold(&fc(color::ACCENT, &format!("ℹ  {msg}")))
+    )
 }
 
 /// 生成排行榜模板。
@@ -527,6 +541,42 @@ pub fn leaderboard(title: &str, headers: &[&str], rows: &[Vec<&str>]) -> String 
         fc(color::ACCENT, "🏆"),
         bold(&fc(color::TITLE, title))
     )
+}
+
+/// 发送 HTML 消息到 Matrix 房间。
+///
+/// 统一的消息发送函数，所有命令处理器都应使用此函数发送消息。
+/// 自动生成纯文本 fallback 以确保在不支持 HTML 的客户端也能正常显示。
+///
+/// # Arguments
+///
+/// * `room` - Matrix 房间实例
+/// * `html` - HTML 格式的消息内容
+///
+/// # Returns
+///
+/// 成功返回 `Ok(())`，失败返回错误。
+///
+/// # Example
+///
+/// ```ignore
+/// use aether_matrix::ui::templates::{info_card, send_html};
+///
+/// let html = info_card("标题", &[("键", "值")]);
+/// send_html(&room, &html).await?;
+/// ```
+pub async fn send_html(room: &matrix_sdk::Room, html: &str) -> anyhow::Result<()> {
+    let plain_text = html
+        .replace(|c: char| !c.is_ascii_alphanumeric() && c != ' ', "")
+        .chars()
+        .take(100)
+        .collect::<String>();
+
+    let content = matrix_sdk::ruma::events::room::message::RoomMessageEventContent::text_html(
+        plain_text, html,
+    );
+    room.send(content).await?;
+    Ok(())
 }
 
 #[cfg(test)]

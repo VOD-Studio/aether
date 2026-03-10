@@ -2,10 +2,9 @@
 
 use anyhow::Result;
 use async_trait::async_trait;
-use matrix_sdk::ruma::events::room::message::RoomMessageEventContent;
 
 use crate::command::{CommandContext, CommandHandler, Permission};
-use crate::ui::{error, info_card, success, warning};
+use crate::ui::{error, info_card, send_html, success, warning};
 
 /// Bot 管理命令处理器。
 ///
@@ -319,7 +318,7 @@ impl BotInfoHandler {
         send_html(&ctx.room, &html).await
     }
 
-    async fn handle_avatar(&self, ctx: &CommandContext<'_>) -> Result<()> {
+async fn handle_avatar(&self, ctx: &CommandContext<'_>) -> Result<()> {
         // 检查权限 - 需要 BotOwner
         if !Permission::BotOwner
             .check(&ctx.room, &ctx.sender, ctx.bot_owners)
@@ -643,18 +642,4 @@ impl CommandHandler for BotPingHandler {
         let html = success("Pong! 机器人响应正常");
         send_html(&ctx.room, &html).await
     }
-}
-
-/// 发送 HTML 消息
-async fn send_html(room: &matrix_sdk::Room, html: &str) -> Result<()> {
-    // 提取纯文本作为 fallback
-    let plain_text = html
-        .replace(|c: char| !c.is_ascii_alphanumeric() && c != ' ', "")
-        .chars()
-        .take(100)
-        .collect::<String>();
-
-    let content = RoomMessageEventContent::text_html(plain_text, html);
-    room.send(content).await?;
-    Ok(())
 }

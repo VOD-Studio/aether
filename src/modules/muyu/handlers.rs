@@ -2,11 +2,10 @@
 
 use anyhow::Result;
 use async_trait::async_trait;
-use matrix_sdk::ruma::events::room::message::RoomMessageEventContent;
 use std::sync::Arc;
 
 use crate::command::{CommandContext, CommandHandler, Permission};
-use crate::ui::{error, info_card, leaderboard, success};
+use crate::ui::{error, info, info_card, leaderboard, send_html, success, warning};
 
 use super::logic::MuyuLogic;
 use super::models::{HitResult, Rarity};
@@ -394,31 +393,6 @@ impl CommandHandler for BagHandler {
         let html = info_card(&format!("背包 (共 {} 件)", total), &items);
         send_html(&ctx.room, &html).await
     }
-}
-
-// ==================== 辅助函数 ====================
-
-/// 发送 HTML 消息
-async fn send_html(room: &matrix_sdk::Room, html: &str) -> Result<()> {
-    let plain_text = html
-        .replace(|c: char| !c.is_ascii_alphanumeric() && c != ' ', "")
-        .chars()
-        .take(100)
-        .collect::<String>();
-
-    let content = RoomMessageEventContent::text_html(plain_text, html);
-    room.send(content).await?;
-    Ok(())
-}
-
-/// 警告消息
-fn warning(msg: &str) -> String {
-    format!("<blockquote><b>⚠ {}</b></blockquote>", msg)
-}
-
-/// 信息消息
-fn info(msg: &str) -> String {
-    format!("<blockquote><b>ℹ {}</b></blockquote>", msg)
 }
 
 /// 渲染敲木鱼结果

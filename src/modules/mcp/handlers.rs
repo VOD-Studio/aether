@@ -1,14 +1,13 @@
 //! MCP 命令处理器实现
 
 use async_trait::async_trait;
-use matrix_sdk::ruma::events::room::message::RoomMessageEventContent;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::info;
 
 use crate::command::{CommandContext, CommandHandler, Permission};
 use crate::mcp::{McpServerManager, ServerStatus};
-use crate::ui::{error, info_card, success, warning};
+use crate::ui::{error, info_card, send_html, success, warning};
 
 /// MCP 管理命令处理器。
 ///
@@ -304,17 +303,4 @@ impl<T: crate::traits::AiServiceTrait> McpHandler<T> {
         let html = info_card("MCP 命令", &items);
         send_html(&ctx.room, &html).await
     }
-}
-
-/// 发送 HTML 消息
-async fn send_html(room: &matrix_sdk::Room, html: &str) -> anyhow::Result<()> {
-    let plain_text = html
-        .replace(|c: char| !c.is_ascii_alphanumeric() && c != ' ', "")
-        .chars()
-        .take(100)
-        .collect::<String>();
-
-    let content = RoomMessageEventContent::text_html(plain_text, html);
-    room.send(content).await?;
-    Ok(())
 }

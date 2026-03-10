@@ -54,6 +54,6 @@ async fn test_tool_registry_to_openai_tools_conversion() {
 
 // TODO: Add tests for:
 // - External MCP server connection (requires mock server)
-// - Tool execution with retry logic (requires mock tools)
+// - Tool execution with retry logic (requires mock server)
 // - Dynamic reload functionality (requires config reloading)
 // - Error handling scenarios

@@ -109,12 +109,12 @@ impl AiServiceTrait for MockAiService {
         None
     }
 
-    async fn list_mcp_tools(&self) -> Vec<aether_matrix::mcp::ToolDefinition> {
-        vec![]
-    }
-
     fn inner_mcp_registry(&self) -> Option<Arc<RwLock<aether_matrix::mcp::ToolRegistry>>> {
         None
+    }
+
+    async fn list_mcp_tools(&self) -> Vec<aether_matrix::mcp::ToolDefinition> {
+        vec![]
     }
 
     async fn has_tools(&self) -> bool {

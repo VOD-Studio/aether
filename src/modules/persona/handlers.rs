@@ -2,11 +2,10 @@
 
 use anyhow::Result;
 use async_trait::async_trait;
-use matrix_sdk::ruma::events::room::message::RoomMessageEventContent;
 
 use crate::command::{CommandContext, CommandHandler, Permission};
 use crate::store::{Persona, PersonaStore};
-use crate::ui::{error, info_card, success, warning};
+use crate::ui::{error, info_card, send_html, success, warning};
 
 /// Persona 命令处理器。
 ///
@@ -418,18 +417,4 @@ impl PersonaHandler {
             }
         }
     }
-}
-
-/// 发送 HTML 消息
-async fn send_html(room: &matrix_sdk::Room, html: &str) -> Result<()> {
-    // 提取纯文本作为 fallback
-    let plain_text = html
-        .replace(|c: char| !c.is_ascii_alphanumeric() && c != ' ', "")
-        .chars()
-        .take(100)
-        .collect::<String>();
-
-    let content = RoomMessageEventContent::text_html(plain_text, html);
-    room.send(content).await?;
-    Ok(())
 }
