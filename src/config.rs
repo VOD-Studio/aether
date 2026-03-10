@@ -98,6 +98,10 @@ pub struct Config {
     /// MCP 配置
     #[serde(default)]
     pub mcp: crate::mcp::McpConfig,
+
+    /// Meme 梗图配置
+    #[serde(default)]
+    pub meme: MemeConfig,
 }
 
 /// Matrix 连接配置
@@ -249,6 +253,23 @@ pub struct LogConfig {
     pub level: String,
 }
 
+/// Meme 梗图配置
+#[derive(Debug, Clone, Deserialize)]
+pub struct MemeConfig {
+    /// 是否启用梗图功能。
+    #[serde(default = "default_meme_enabled")]
+    pub enabled: bool,
+
+    /// Tenor API Key。
+    ///
+    /// 从 https://developers.google.com/tenor/guides/quickstart 获取
+    pub api_key: Option<String>,
+
+    /// 每次搜索返回的结果数量。
+    #[serde(default = "default_meme_limit")]
+    pub limit: u32,
+}
+
 // 默认值函数
 fn default_device_display_name() -> String {
     "AI Bot".to_string()
@@ -288,6 +309,12 @@ fn default_vision_max_image_size() -> u32 {
 }
 fn default_log_level() -> String {
     "info".to_string()
+}
+fn default_meme_enabled() -> bool {
+    true
+}
+fn default_meme_limit() -> u32 {
+    8
 }
 
 impl Default for MatrixConfig {
@@ -349,6 +376,16 @@ impl Default for LogConfig {
     fn default() -> Self {
         Self {
             level: default_log_level(),
+        }
+    }
+}
+
+impl Default for MemeConfig {
+    fn default() -> Self {
+        Self {
+            enabled: default_meme_enabled(),
+            api_key: None,
+            limit: default_meme_limit(),
         }
     }
 }
@@ -504,6 +541,23 @@ impl Config {
 
         // MCP 配置
         self.mcp.apply_env_overrides();
+
+        // Meme 配置
+        if let Ok(v) = std::env::var("MEME_ENABLED") {
+            self.meme.enabled = v.to_lowercase() != "false";
+        }
+        if let Ok(v) = std::env::var("TENOR_API_KEY") {
+            self.meme.api_key = Some(v);
+        }
+        if let Ok(v) = std::env::var("MEME_LIMIT")
+            && let Ok(n) = v.parse()
+        {
+            self.meme.limit = n;
+        }
+        // 如果设置了 TENOR_API_KEY，自动启用 meme 功能
+        if self.meme.api_key.is_some() {
+            self.meme.enabled = true;
+        }
     }
 
     /// 验证必需字段
