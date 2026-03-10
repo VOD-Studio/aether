@@ -34,15 +34,6 @@ pub struct ToolDefinition {
     pub parameters: serde_json::Value,
 }
 
-/// 工具来源
-#[derive(Debug, Clone, PartialEq)]
-pub enum ToolSource {
-    /// 内置工具
-    BuiltIn,
-    /// 外部 MCP 服务器（包含服务器名称）
-    ExternalMcp(String),
-}
-
 /// 统一的工具接口
 ///
 /// 所有工具（内置和外部）都必须实现此 trait。
@@ -61,9 +52,6 @@ pub trait Tool: Send + Sync {
     ///
     /// 返回工具执行结果
     async fn execute(&self, arguments: serde_json::Value) -> Result<ToolResult>;
-
-    /// 获取工具来源
-    fn source(&self) -> ToolSource;
 }
 
 /// 工具注册表
@@ -109,11 +97,6 @@ impl ToolRegistry {
         self.tools.insert(name, tool);
     }
 
-    /// 注册外部 MCP 工具
-    pub fn register_mcp_tool(&mut self, tool: Arc<dyn Tool>) {
-        self.register(tool);
-    }
-
     /// 获取所有工具定义（OpenAI 格式）
     pub fn to_openai_tools(&self) -> Vec<ChatCompletionTools> {
         self.tools
@@ -155,57 +138,15 @@ impl ToolRegistry {
         tool.execute(arguments).await
     }
 
-    /// 获取工具数量
-    pub fn len(&self) -> usize {
-        self.tools.len()
-    }
-
     /// 检查是否为空
     pub fn is_empty(&self) -> bool {
         self.tools.is_empty()
-    }
-
-    /// 移除指定来源的所有工具
-    pub fn remove_by_source(&mut self, source: &ToolSource) {
-        let to_remove: Vec<String> = self
-            .tools
-            .iter()
-            .filter(|(_, tool)| tool.source() == *source)
-            .map(|(name, _)| name.clone())
-            .collect();
-
-        for name in to_remove {
-            self.tools.remove(&name);
-        }
-    }
-
-    /// 移除所有外部 MCP 工具
-    pub fn remove_all_external_tools(&mut self) {
-        let external_sources: Vec<ToolSource> = self
-            .tools
-            .values()
-            .map(|tool| tool.source())
-            .filter(|source| matches!(source, ToolSource::ExternalMcp(_)))
-            .collect();
-
-        for source in external_sources {
-            self.remove_by_source(&source);
-        }
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn test_tool_registry_creation() {
-        let config = super::super::BuiltinToolsConfig::default();
-        let registry = ToolRegistry::new(&config);
-
-        // 默认配置下，内置工具应该是启用的
-        assert!(registry.len() > 0);
-    }
 
     #[test]
     fn test_tool_result_serialization() {

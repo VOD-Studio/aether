@@ -7,7 +7,7 @@ use async_trait::async_trait;
 use schemars::JsonSchema;
 use serde::Deserialize;
 
-use crate::mcp::{Tool, ToolDefinition, ToolResult, ToolSource};
+use crate::mcp::{Tool, ToolDefinition, ToolResult};
 
 /// Web Fetch 工具参数
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -128,10 +128,6 @@ impl Tool for WebFetchTool {
             content: truncated,
             error: None,
         })
-    }
-
-    fn source(&self) -> ToolSource {
-        ToolSource::BuiltIn
     }
 }
 

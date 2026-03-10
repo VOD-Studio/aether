@@ -6,7 +6,7 @@ mod web_fetch;
 
 pub use web_fetch::WebFetchTool;
 
-use super::{Tool, ToolSource};
+use super::Tool;
 
 /// 内置工具枚举
 pub enum BuiltInTools {
@@ -26,9 +26,5 @@ impl Tool for BuiltInTools {
         match self {
             BuiltInTools::WebFetch(tool) => tool.execute(arguments).await,
         }
-    }
-
-    fn source(&self) -> ToolSource {
-        ToolSource::BuiltIn
     }
 }

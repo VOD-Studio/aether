@@ -12,7 +12,7 @@ use tokio::sync::RwLock;
 use tracing::{error, info, warn};
 
 use super::config::{ExternalServerConfig, McpConfig, TransportType};
-use super::tool_registry::{Tool, ToolDefinition, ToolRegistry, ToolResult, ToolSource};
+use super::tool_registry::{Tool, ToolDefinition, ToolRegistry, ToolResult};
 use super::transport::StdioTransport;
 
 /// 服务器连接状态
@@ -147,11 +147,6 @@ impl McpServer {
         &self.status
     }
 
-    /// 获取服务器配置
-    pub fn config(&self) -> &ExternalServerConfig {
-        &self.config
-    }
-
     /// 是否应该重试连接
     pub fn should_retry(&self) -> bool {
         if !self.config.enabled {
@@ -227,10 +222,6 @@ impl Tool for ExternalMcpTool {
 
         // 调用工具时使用原始工具名称，不带前缀
         server.call_tool(&self.tool.name, arguments).await
-    }
-
-    fn source(&self) -> ToolSource {
-        ToolSource::ExternalMcp(self.server_name.clone())
     }
 }
 
@@ -339,53 +330,5 @@ impl McpServerManager {
         }
 
         statuses
-    }
-
-    /// 重载配置
-    pub async fn reload_config(&mut self, new_config: &McpConfig) -> Result<()> {
-        info!("Reloading MCP server configuration");
-
-        // 移除不再配置的服务器
-        let existing_names: Vec<_> = self.servers.keys().cloned().collect();
-        for name in existing_names {
-            if !new_config.external_servers.iter().any(|s| s.name == name) {
-                info!("Removing MCP server: {}", name);
-                self.servers.remove(&name);
-            }
-        }
-
-        // 添加或更新服务器
-        for server_config in &new_config.external_servers {
-            if !server_config.enabled {
-                continue;
-            }
-
-            if let Some(existing) = self.servers.get(&server_config.name) {
-                // 更新配置
-                let mut existing_guard = existing.write().await;
-                existing_guard.config = server_config.clone();
-                // 如果配置变化了，重新连接
-                if existing_guard.status() == &ServerStatus::Connected {
-                    existing_guard.status = ServerStatus::Disconnected;
-                }
-            } else {
-                // 新增服务器
-                let server = McpServer::new(server_config.clone());
-                self.servers
-                    .insert(server_config.name.clone(), Arc::new(RwLock::new(server)));
-            }
-        }
-
-        // 重新连接所有服务器
-        self.connect_all_servers().await;
-
-        // 清空注册表中的外部工具，重新注册
-        {
-            let mut registry = self.tool_registry.write().await;
-            registry.remove_all_external_tools();
-        }
-        self.register_all_external_tools().await;
-
-        Ok(())
     }
 }

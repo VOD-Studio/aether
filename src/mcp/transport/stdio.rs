@@ -15,7 +15,6 @@ use super::super::config::ExternalServerConfig;
 /// Stdio 传输客户端
 pub struct StdioTransport {
     peer: Peer<RoleClient>,
-    config: ExternalServerConfig,
 }
 
 impl StdioTransport {
@@ -46,17 +45,11 @@ impl StdioTransport {
 
         Ok(Self {
             peer: service.peer().clone(),
-            config: config.clone(),
         })
     }
 
     /// 获取 MCP 客户端 Peer 引用
     pub fn peer(&self) -> &Peer<RoleClient> {
         &self.peer
-    }
-
-    /// 获取服务器配置
-    pub fn config(&self) -> &ExternalServerConfig {
-        &self.config
     }
 }

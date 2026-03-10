@@ -85,4 +85,4 @@ pub mod transport;
 
 pub use config::{BuiltinToolsConfig, McpConfig, WebFetchConfig};
 pub use server_manager::{McpServerManager, ServerStatus};
-pub use tool_registry::{Tool, ToolDefinition, ToolRegistry, ToolResult, ToolSource};
+pub use tool_registry::{Tool, ToolDefinition, ToolRegistry, ToolResult};
