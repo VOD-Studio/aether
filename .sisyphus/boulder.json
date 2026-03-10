@@ -1,10 +1,10 @@
 {
-  "active_plan": "/Users/xfy/Developer/aether/.sisyphus/plans/documentation-improvement.md",
-  "started_at": "2026-03-09T16:00:12.935Z",
+  "active_plan": "/Users/xfy/Developer/aether-unit-tests/.sisyphus/plans/test-improvement.md",
+  "started_at": "2026-03-10T08:05:00.000Z",
   "session_ids": [
-    "ses_32de363ebffe3QGuZ0LbYy3eZR"
+    "ses_329469bfaffeWuJ8M7277NkmZb"
   ],
-  "plan_name": "documentation-improvement",
+  "plan_name": "test-improvement",
   "agent": "atlas",
-  "worktree_path": "/Users/xfy/Developer/aether-worktrees/docs-improvement"
+  "worktree_path": "/Users/xfy/Developer/aether-unit-tests"
 }

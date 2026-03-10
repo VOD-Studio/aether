@@ -1,8 +1,13 @@
-use aether_matrix::traits::MatrixClient;
 use anyhow::Result;
 use matrix_sdk::ruma::{OwnedRoomId, OwnedUserId, RoomId};
 use std::sync::Arc;
 use tokio::sync::Mutex;
+
+/// Trait for mocking Matrix client operations.
+pub trait MatrixClient {
+    fn user_id(&self) -> Option<OwnedUserId>;
+    async fn join_room_by_id(&self, room_id: &RoomId) -> Result<()>;
+}
 
 #[derive(Clone)]
 pub struct MockClient {

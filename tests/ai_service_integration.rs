@@ -34,6 +34,8 @@ mock! {
         async fn chat_with_tools<'a>(&self, session_id: &str, prompt: &str, system_prompt: Option<&'a str>) -> anyhow::Result<String>;
         fn mcp_server_manager(&self) -> Option<std::sync::Arc<tokio::sync::RwLock<aether_matrix::mcp::McpServerManager>>>;
         async fn list_mcp_tools(&self) -> Vec<aether_matrix::mcp::ToolDefinition>;
+        fn inner_mcp_registry(&self) -> Option<std::sync::Arc<tokio::sync::RwLock<aether_matrix::mcp::ToolRegistry>>>;
+        async fn has_tools(&self) -> bool;
     }
 }
 

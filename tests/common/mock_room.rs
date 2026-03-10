@@ -1,9 +1,14 @@
-use aether_matrix::traits::MessageSender;
 use anyhow::Result;
 use matrix_sdk::ruma::OwnedEventId;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use tokio::sync::Mutex;
+
+/// Trait for mocking message sending operations.
+pub trait MessageSender {
+    async fn send(&self, content: &str) -> Result<OwnedEventId>;
+    async fn edit(&self, event_id: OwnedEventId, new_content: &str) -> Result<()>;
+}
 
 #[derive(Clone)]
 pub struct MockRoom {
