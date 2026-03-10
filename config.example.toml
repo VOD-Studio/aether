@@ -13,7 +13,7 @@ username = "@your-bot:matrix.org"
 password = "your-password"
 # device_id = "AETHER_BOT_001"  # 可选，持久化设备 ID，避免重复登录创建新设备
 device_display_name = "AI Bot"
-store_path = "./store"
+store_path = "./store"  # Matrix SDK 存储目录：会话状态、同步数据
 
 # OpenAI API 配置
 [openai]
@@ -26,8 +26,9 @@ model = "gpt-4o-mini"
 [bot]
 command_prefix = "!"
 max_history = 10
-# owners = ["@admin:matrix.org"]  # Bot 管理员列表
-db_path = "./data/aether.db"
+# owners = ["@admin:matrix.org", "@bot:example.org"]  # Bot 管理员列表（逗号分隔）
+# system_prompt = "你是一个有帮助的 AI 助手"  # 全局系统提示词
+db_path = "./data/aether.db"  # Bot 数据库：Persona、木鱼功德等持久化数据
 
 # 流式输出配置
 [streaming]

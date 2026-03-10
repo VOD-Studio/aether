@@ -6,3 +6,4 @@ aether-matrix
 *.db
 *.db-journal
 *.log
+config.toml

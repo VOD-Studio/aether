@@ -308,11 +308,7 @@ impl<T: AiServiceTrait> EventHandler<T> {
             streaming_min_chars: config.streaming.min_chars,
             vision_enabled: config.vision.enabled,
             vision_max_image_size: config.vision.max_image_size,
-            tools_enabled: config.mcp.enabled
-                && mcp_registry
-                    .as_ref()
-                    .map(|r: &Arc<RwLock<crate::mcp::ToolRegistry>>| !r.blocking_read().is_empty())
-                    .unwrap_or(false),
+            tools_enabled: config.mcp.enabled,
             mcp_registry,
         }
     }
