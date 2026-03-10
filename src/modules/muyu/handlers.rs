@@ -93,16 +93,34 @@ impl CommandHandler for MeritHandler {
                 let equipped = titles.iter().find(|t| t.equipped);
 
                 let mut items: Vec<(&str, &str)> = vec![
-                    ("累计功德", Box::leak(record.merit_total.to_string().into_boxed_str())),
-                    ("今日功德", Box::leak(record.merit_today.to_string().into_boxed_str())),
-                    ("今日敲击", Box::leak(record.hits_today.to_string().into_boxed_str())),
-                    ("最大连击", Box::leak(record.max_combo.to_string().into_boxed_str())),
-                    ("会心一击", Box::leak(record.critical_count.to_string().into_boxed_str())),
+                    (
+                        "累计功德",
+                        Box::leak(record.merit_total.to_string().into_boxed_str()),
+                    ),
+                    (
+                        "今日功德",
+                        Box::leak(record.merit_today.to_string().into_boxed_str()),
+                    ),
+                    (
+                        "今日敲击",
+                        Box::leak(record.hits_today.to_string().into_boxed_str()),
+                    ),
+                    (
+                        "最大连击",
+                        Box::leak(record.max_combo.to_string().into_boxed_str()),
+                    ),
+                    (
+                        "会心一击",
+                        Box::leak(record.critical_count.to_string().into_boxed_str()),
+                    ),
                 ];
 
                 if let Some(t) = equipped {
                     let icon = t.title.icon.as_deref().unwrap_or("");
-                    items.push(("当前称号", Box::leak(format!("{} {}", icon, t.title.name).into_boxed_str())));
+                    items.push((
+                        "当前称号",
+                        Box::leak(format!("{} {}", icon, t.title.name).into_boxed_str()),
+                    ));
                 }
 
                 let html = info_card("功德信息", &items);
@@ -165,7 +183,8 @@ impl CommandHandler for RankHandler {
                 };
 
                 // 简化用户 ID 显示
-                let user_display = entry.user_id
+                let user_display = entry
+                    .user_id
                     .split(':')
                     .next()
                     .unwrap_or(&entry.user_id)
@@ -182,7 +201,10 @@ impl CommandHandler for RankHandler {
         let html = leaderboard(
             "功德排行榜",
             &headers,
-            &rows.iter().map(|r| r.iter().map(|s| s.as_str()).collect()).collect::<Vec<_>>(),
+            &rows
+                .iter()
+                .map(|r| r.iter().map(|s| s.as_str()).collect())
+                .collect::<Vec<_>>(),
         );
         send_html(&ctx.room, &html).await
     }
@@ -228,13 +250,19 @@ impl CommandHandler for TitleHandler {
             self.handle_list(ctx, &user_id, &room_id).await
         } else {
             // 装备称号
-            self.handle_equip(ctx, &user_id, &room_id, &args.join(" ")).await
+            self.handle_equip(ctx, &user_id, &room_id, &args.join(" "))
+                .await
         }
     }
 }
 
 impl TitleHandler {
-    async fn handle_list(&self, ctx: &CommandContext<'_>, user_id: &str, room_id: &str) -> Result<()> {
+    async fn handle_list(
+        &self,
+        ctx: &CommandContext<'_>,
+        user_id: &str,
+        room_id: &str,
+    ) -> Result<()> {
         let titles = self.store.get_user_titles(user_id, room_id)?;
 
         if titles.is_empty() {
@@ -246,10 +274,13 @@ impl TitleHandler {
             .iter()
             .map(|t| {
                 let icon = t.title.icon.as_deref().unwrap_or("");
-                let _equipped = if t.equipped { " ✓" } else { "" };
+                let equipped = if t.equipped { " ✓" } else { "" };
                 let rarity = t.title.rarity.display_name();
                 (
-                    Box::leak(format!("{} {} [{}]{}", icon, t.title.name, rarity, equipped).into_boxed_str()) as &str,
+                    Box::leak(
+                        format!("{} {} [{}]{}", icon, t.title.name, rarity, equipped)
+                            .into_boxed_str(),
+                    ) as &str,
                     if t.equipped { "已装备" } else { "" },
                 )
             })
@@ -259,7 +290,13 @@ impl TitleHandler {
         send_html(&ctx.room, &html).await
     }
 
-    async fn handle_equip(&self, ctx: &CommandContext<'_>, user_id: &str, room_id: &str, name: &str) -> Result<()> {
+    async fn handle_equip(
+        &self,
+        ctx: &CommandContext<'_>,
+        user_id: &str,
+        room_id: &str,
+        name: &str,
+    ) -> Result<()> {
         // 查找称号
         let titles = self.store.get_user_titles(user_id, room_id)?;
         let title = titles.iter().find(|t| t.title.name == name);
@@ -321,7 +358,8 @@ impl CommandHandler for BagHandler {
         }
 
         // 统计物品数量
-        let mut item_counts: std::collections::HashMap<String, (i32, String, Rarity)> = std::collections::HashMap::new();
+        let mut item_counts: std::collections::HashMap<String, (i32, String, Rarity)> =
+            std::collections::HashMap::new();
         for drop in &drops {
             let entry = item_counts.entry(drop.item_name.clone()).or_insert((
                 0,
@@ -419,7 +457,10 @@ fn render_hit_result(result: &HitResult) -> String {
         let rarity_name = item.rarity.display_name();
         parts.push(format!(
             r#"<br><b>🎁 <font color="{}">[{}]</font> {} {} 收入背包！</b>"#,
-            rarity_color, rarity_name, item.item_icon.as_deref().unwrap_or(""), item.item_name
+            rarity_color,
+            rarity_name,
+            item.item_icon.as_deref().unwrap_or(""),
+            item.item_name
         ));
     }
 
@@ -436,3 +477,4 @@ fn render_hit_result(result: &HitResult) -> String {
 
     format!("<blockquote>{}</blockquote>", parts.join("<br>"))
 }
+
